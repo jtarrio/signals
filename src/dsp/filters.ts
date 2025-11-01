@@ -250,10 +250,10 @@ export class Deemphasizer implements Filter {
     this.val = val;
   }
 }
+
 /**
  * Shifts IQ samples by a given frequency.
  */
-
 export class FrequencyShifter {
   constructor(private sampleRate: number) {
     this.cosine = 1;

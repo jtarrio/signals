@@ -21,11 +21,9 @@ export interface SampleReceiver {
   receiveSamples(I: Float32Array, Q: Float32Array, frequency: number): void;
 }
 
-/**
- * A "composite" sample receiver that executes its component receivers in sequence.
- */
+/** A "composite" sample receiver that executes its component receivers in sequence. */
 export class CompositeReceiver implements SampleReceiver {
-  /** Creates a ReceiverSequence out of the given SampleReceivers. */
+  /** Creates a CompositeReceiver out of the given SampleReceivers. */
   static of(first: SampleReceiver, ...rest: SampleReceiver[]): SampleReceiver {
     let list: SampleReceiver[] = [];
     if (first instanceof CompositeReceiver) {

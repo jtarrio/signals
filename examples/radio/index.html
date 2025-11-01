@@ -4,14 +4,14 @@
     <script type="importmap">
       {
         "imports": {
-          "@jtarrio/webrtlsdr/": "/dist/"
+          "@jtarrio/demodulator/": "/dist/"
         }
       }
     </script>
     <script src="script.js" type="module"></script>
   </head>
   <body>
-    <h1>High-level Web RTL-SDR demo</h1>
+    <h1>High-level <i>Demodulator</i> demo</h1>
     <p>A full-featured SDR receiver.</p>
 
     <div>
@@ -23,16 +23,6 @@
       ><input id="frequencyInput" type="number" />
       <label for="offsetInput">Tuning offset: </label
       ><input id="offsetInput" type="number" />
-      <label for="ppmInput">Frequency correction (PPM):</label
-      ><input id="ppmInput" type="number" />
-    </div>
-
-    <div>
-      <label for="gainInput">Gain: </label
-      ><input id="gainInput" type="range" min="0" max="50" />
-      <input id="autoGainBox" type="checkbox" /><label for="autoGainBox"
-        >Auto gain</label
-      >
     </div>
 
     <div>

@@ -43,11 +43,7 @@ export class RadioError extends Error {
 }
 
 export enum RadioErrorType {
-  NoUsbSupport,
-  NoDeviceSelected,
-  UnsupportedDevice,
-  UsbTransferError,
-  TunerError,
+  TransferError,
   DemodulationError,
 }
 

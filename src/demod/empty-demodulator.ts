@@ -15,7 +15,7 @@
 import { Demod, Mode, getDemod, getMode, modeParameters } from "./modes.js";
 import { Player } from "./player.js";
 import { AudioPlayer } from "../players/audioplayer.js";
-import { SampleReceiver } from "../radio.js";
+import { SampleReceiver } from "../radio/sample_receiver.js";
 
 /**
  * A class that takes a stream of radio samples and demodulates

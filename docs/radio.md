@@ -1,31 +1,32 @@
-# Web RTL-SDR High-level API
+# _Demodulator_ Radio API
 
-The high-level API lets you operate a multimode radio receiver in not many lines of code.
+The Radio API lets you operate a multimode radio receiver in not many lines of code.
 
-This API provides a [`Radio`](../src/radio/radio.ts) class, which receives commands from your program, controls the RTL-SDR device, and generates a stream of samples; and a [`SampleReceiver`](../src/radio/sample_receiver.ts) interface, which receives the sample stream and operates on it.
+This API provides a [`SignalSource`](../src/radio/signal_source.ts) interface that connects to a radio receiver or signal generator, a [`Radio`](../src/radio/radio.ts) class that receives commands from your program to control the signal source and generate a stream of samples, and a [`SampleReceiver`](../src/radio/sample_receiver.ts) interface that operates on the sample stream.
 
-The API also provides a [`Demodulator`](../src/demod/demodulator.ts), which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) that can demodulate FM, AM, SSB, and CW signals and play them on the speakers or headphones using the Web Audio API.
+The API also provides a [`Demodulator`](../src/demod/demodulator.ts) class, which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) that can demodulate FM, AM, SSB, and CW signals and play them on the speakers or headphones using the Web Audio API.
 
 ## The `Radio` class
 
 ### Imports
 
-To use the high-level [`Radio`](../src/radio/radio.ts) API, import the following modules:
+To use the [`Radio`](../src/radio/radio.ts) API, import the following module:
 
 ```typescript
-import { Radio } from "@jtarrio/webrtlsdr/radio.js";
-import { RTL2832U_Provider } from "@jtarrio/webrtlsdr/rtlsdr.js";
+import { Radio } from "@jtarrio/demodulator/radio.js";
 ```
 
 ### Create a `Radio`
 
-The constructor for the [`Radio`](../src/radio/radio.ts) class takes two arguments: an [`RtlDeviceProvider`](../src/rtlsdr/rtldevice.ts) that returns the RTL-SDR device to use, and a [`SampleReceiver`](../src/radio/sample_receiver.ts) that will get the sample stream.
+The constructor for the [`Radio`](../src/radio/radio.ts) class takes two arguments: a [`SignalSourceProvider`](../src/radio/signal_source.ts) that returns the signal source to use, and a [`SampleReceiver`](../src/radio/sample_receiver.ts) that will get the sample stream.
 
 #### Example
 
-We need a [`SampleReceiver`](../src/radio/sample_receiver.ts) object to create the [`Radio`](../src/radio/radio.ts), so for this example, we'll create one that logs the number of samples that were received in each block. (There will be a full explanation of the [`SampleReceiver`](../src/radio/sample_receiver.ts) interface later.)
+We need a [`SignalSource`](../src/radio/signal_source.ts) object and a [`SampleReceiver`](../src/radio/sample_receiver.ts) object to create the [`Radio`](../src/radio/radio.ts). For this example, we will create a tone generator and a sample receiver logs the number of samples that were received in each block. (There will be a full explanation of the [`SignalSource`](../src/radio/signal_source.ts) and [`SampleReceiver`](../src/radio/sample_receiver.ts) interfaces later.)
 
 ```typescript
+import { RealTimeSource, SimpleProvider } from "@jtarrio/demodulator/radio.js";
+
 class MyReceiver {
   setSampleRate(sampleRate) {}
   receiveSamples(I, Q, frequency) {
@@ -33,8 +34,9 @@ class MyReceiver {
   }
 }
 
+let source = new RealTimeSource(tone(10000000, 0.1));
 let receiver = new MyReceiver();
-let radio = new Radio(new RTL2832U_Provider(), receiver);
+let radio = new Radio(new SimpleProvider(source), receiver);
 ```
 
 ### Start and stop playing
@@ -70,7 +72,6 @@ The [`Radio`](../src/radio/radio.ts) class can dispatch `radio` events. Those ev
 
 - `starting`: dispatched when the radio starts playing;
 - `stopping`: dispatched when the radio stops playing;
-- `directSampling`: dispatched when the radio enters or leaves direct sampling mode. The `active` property contains whether direct sampling mode is active;
 - `error`: dispatched when the radio fails because of an error. The `exception` property contains the exception that caused the error, if any.
 
 ```typescript
@@ -79,10 +80,6 @@ radio.addEventListener("radio", onRadio);
 function onRadio(e) {
   if (e.detail.type == "started") console.log("Radio started");
   if (e.detail.type == "stopped") console.log("Radio stopped");
-  if (e.detail.type == "directSampling")
-    console.log(
-      e.detail.active ? "Radio is direct sampling" : "Radio is tuner sampling"
-    );
   if (e.detail.type == "error")
     console.log("Radio returned an error:", e.detail.exception);
 }
@@ -96,7 +93,7 @@ Also, note that the methods that set parameters may return before the radio star
 
 #### Sample rate
 
-The sample rate is the number of samples the radio will capture per second. Most RTL-SDR devices seem to work with sample rates between 960,000 and 2,880,000. Some devices can be set to 250,000 samples per second, but with strong aliasing problems.
+The sample rate is the number of samples the radio will capture per second. The valid sample rates depend on your signal source.
 
 Due to the Nyquist Theorem, the sample rate also determines the bandwidth of the signal the radio can capture at once: 1 sample per second corresponds to 1 Hertz of bandwidth. Therefore, if you want to increase the bandwidth, you also need to increase the sample rate; if you want to decrease the sample rate, you will also decrease the bandwidth.
 
@@ -132,93 +129,191 @@ console.log("Current frequency:", radio.getFrequency());
 
 By default, the radio is tuned to 88.5 MHz.
 
-#### Frequency correction factor
+#### Parameters
 
-RTL-SDR devices use a crystal oscillator to generate their internal reference signals. Due to manufacturing tolerances and other considerations, most oscillators run at a slightly different frequency than nominal, which makes RTL-SDR devices tune a little off-frequency.
+Some signal sources have configurable parameters; their names and allowed values depend on the particular signal source.
 
-You can set a "frequency correction factor" that makes the radio tune slightly up or down to compensate for the inaccuracy in its crystal. This factor is expressed in "parts per million," and you can set it with the `setFrequencyCorrection()` method.
+You can set the value of a parameter with the `setParameter()` method.
 
 ```typescript
-radio.setFrequencyCorrection(ppm);
+radio.setParameter("gain", 3);
 ```
 
-You can also check the current frequency correction factor with the `getFrequencyCorrection()` method.
+You can get the value of a parameter (that you set previously) with the `getParameter()` method.
 
 ```typescript
-console.log("Frequency correction PPM:", radio.getFrequencyCorrection());
+console.log("Gain:", radio.getParameter("gain"));
 ```
 
-By default, the radio uses a 0 PPM correction factor.
+## The `SignalSource` interface
 
-#### Tuner gain
+When a [`Radio`](../src/radio/radio.ts) object is initialized, it receives a [`SignalSourceProvider`](../src/radio/signal_source.ts) object. Whenever the `play()` method is called, the [`Radio`](../src/radio/radio.ts) the provider's `get()` method to get a [`SignalSource`](../src/radio/signal_source.ts) object.
 
-The tuner in the RTL-SDR device has an amplifier circuit to boost the power of the received signals. You can set the gain of this amplification circuit manually, or you can enable "automatic gain control" to let the RTL-SDR device adjust the gain by itself.
+Using a provider makes it easy to ensure that any initialization happens. For example, if you want to read signals from a file, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the file and return a [`SignalSource`](../src/radio/signal_source.ts) that returns the data from that file. As another example, if you want to receive signals from a websocket, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the connection and return a [`SignalSource`](../src/radio/signal_source.ts) that is ready to receive the signal data.
 
-You can configure the gain with the `setGain()` method. Give it a `null` value to enable automatic gain control, or a number to set the gain to that approximate amount in decibels (dB):
+### Imports
+
+You don't need to import anything if you use JavaScript. If you use TypeScript, you should import the [`SignalSource`](../src/radio/signal_source.ts) and [`SignalSourceProvider`](../src/radio/signal_source.ts) types:
 
 ```typescript
-if (autoGain) {
-  radio.setGain(null);
-} else {
-  radio.setGain(gain);
+import {
+  SignalSource,
+  SignalSourceProvider,
+} from "@jtarrio/demodulator/radio.js";
+```
+
+### Method `setSampleRate()`
+
+The `setSampleRate()` method is called by the [`Radio`](../src/radio/radio.ts) object before starting the stream, whenever the radio's sample rate is changed.
+
+It takes a single parameter:
+
+- `sampleRate` (`number`): the new sample rate as the number of samples per second.
+
+It returns a `Promise` that resolves to the actual sample rate that was set.
+
+### Method `setCenterFrequency()`
+
+The `setCenterFrequency()` method is called by the [`Radio`](../src/radio/radio.ts) object whenever it wants to change the center frequency that the signal source is tuned to.
+
+It takes a single parameter:
+
+- `freq` (`number`): the new frequency, in Hertz.
+
+It returns a `Promise` that resolves to the actual frequency that was set.
+
+### Method `setParameter()`
+
+The `setParameter()` method is called by the [`Radio`](../src/radio/radio.ts) whenever it wants to change the value of a parameter.
+
+It takes two arguments:
+
+- `parameter` (`string`): the name of the parameter to set.
+- `value` (`any`): the new value for the parameter.
+
+It returns a `Promise` that resolves to an undefined value or to the value that was set.
+
+### Method `startReceiving()`
+
+The `startReceiving()` method is called by the [`Radio`](../src/radio/radio.ts) right before starting the stream so the source can start receiving samples.
+
+It takes no parameters and returns a `Promise` that resolves when the source is ready.
+
+### Method `readSamples()`
+
+The `readSamples()` method is called by the [`Radio`](../src/radio/radio.ts) when it wants to receive a block of samples.
+
+It takes one parameter:
+
+- `length` (`number`): the number of samples to read.
+
+It returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/signal_source.ts) when the samples have been received.
+
+The [`Radio`](../src/radio/radio.ts) calls `readSamples()` several times in quick succession, and it expects the `Promises` returned by this method to be resolved in the same order as the calls.
+
+### Method `close()`
+
+The `close()` method is called by the [`Radio`](../src/radio/radio.ts) when it wants to stop receiving samples. Any pending reads must be cancelled and any resources, connections, etc. must be closed. The [`SignalSource`](../src/radio/signal_source.ts) will not be used anymore.
+
+It returns a `Promise` that resolves when the [`SignalSource`](../src/radio/signal_source.ts) is closed.
+
+## The `SampleBlock` type
+
+The [`SignalSource`](../src/radio/signal_source.ts)'s `readSamples()` method returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/signal_source.ts). This [`SampleBlock`](../src/radio/signal_source.ts) is an object that contains the following properties:
+
+- `I` (`Float32Array`): the successive values of the samples' I components.
+- `Q` (`Float32Array`): the successive values of the samples' Q components.
+- `frequency` (`number`): the frequency that the signal source was tuned to when it received this block of samples.
+
+The arrays in the `I` and `Q` properties have the same number of elements, and each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample.
+
+## The `RealTimeSource` class
+
+_Demodulator_ provides a [`RealTimeSource`](../src/sources/realtime.ts) class, which is a [`SignalSource`](../src/radio/signal_source.ts) implementation that calls a function at periodic intervals to generate samples in real time.
+
+```typescript
+import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+
+let source = new RealTimeSource(mySignalGenerator);
+```
+
+The generator function receives these five parameters:
+
+- `startSample` (`number`): the starting sample number for this block of samples. The first sample in the stream is number 0, and so on.
+- `sampleRate` (`number`): the [`RealTimeSource`](../src/sources/realtime.ts)'s sample rate.
+- `centerFrequency` (`number`): the [`RealTimeSource`](../src/sources/realtime.ts)'s current center frequency.
+- `I` (`Float32Array`): the array that will receive the values of the samples' I components.
+- `Q` (`Float32Array`): the array that will receive the values of the samples' Q components.
+
+The `I` and `Q` arrays have the same length, which is the number of samples to generate. Each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample. `I` and `Q` do not come pre-initialized, so you must write a value for every sample.
+
+The following generator function returns a complex sinusoidal wave on 10 Megahertz:
+
+```typescript
+function mySignalGenerator(startSample, sampleRate, centerFrequency, I, Q) {
+  // Calculate the effective frequency, as a fraction of the sample rate.
+  let f = (10000000 - centerFrequency) / sampleRate;
+  // If it goes beyond the bandwidth, return all zeros.
+  if (f >= 0.5 || f <= -0.5) {
+    I.fill(0);
+    Q.fill(0);
+    return;
+  }
+  for (let i = 0; i < I.length; ++i) {
+    const angle = 2 * Math.PI * f * (i + startSample);
+    I[i] = Math.cos(angle);
+    Q[i] = Math.sin(angle);
+  }
 }
 ```
 
-You can get the current gain with the `getGain()` method, which returns a number or a `null` value.
+_Demodulator_ comes with a few [predefined generator functions](../src/sources/generators.ts):
+
+- `tone(frequency, amplitude)`: generates a tone at the given frequency with the given amplitude.
+- `noise(amplitude)`: generates some noise with the given maximum amplitude.
+- `sum(...generators)`: calls the `generators` and adds up their outputs.
+- `product(carrier, signal)`: multiplies each sample of the `carrier` generator with the corresponding sample of the `signal` generator.
+- `modulateAM(carrierFreq, amplitude, signal)`: modulates the output of the `signal` generator in AM with a carrier with the given center frequency and amplitude. Only the I component of the `signal` generator's output is used.
+- `modulateFM(carrierFreq, maximumDeviation, amplitude, signal)`: modulates the output of the `signal` generator in FM with a carrier with the given center frequency, maximum deviation, and amplitude. Only the I component of the `signal` generator's output is used.
+
+The following example shows a [`RealTimeSource`](../src/sources/realtime.ts) that includes several signals in different frequencies, with different modulation schemes, using some of the above generator functions:
 
 ```typescript
-let gain = radio.getGain();
-console.log("Gain:", gain === null ? "auto" : gain);
+import {
+  modulateAM,
+  modulateFM,
+  noise,
+  sum,
+  tone,
+} from "@jtarrio/demodulator/sources/generators.js";
+import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+
+let source = new RealTimeSource(
+  sum(
+    modulateFM(88500000, 75000, 0.1, tone(600, 0.5)),
+    modulateAM(810000, 0.1, tone(600, 0.5)),
+    tone(14020600, 0.1),
+    noise(0.01)
+  )
+);
 ```
 
-By default, the radio uses automatic gain control.
+## The `SimpleProvider` class
 
-#### Direct sampling
-
-Most RTL-SDR devices can only receive signals from 29 MHz to 1700 MHz. Some devices, however, have a modification that allows "direct sampling." In direct sampling mode, the tuner circuit is bypassed, and the digitizer receives the signals directly; this lets the device receive signals below 29 MHz. Depending on how the modification was made, the bypassed signals are received through the `I` channel or the `Q` channel.
-
-If you want to use direct sampling, you only need to specify the method. You don't need to enable or disable it depending on the frequency; Web RTL-SDR will activate it automatically for frequencies below 29 MHz only. When the radio starts or stops using direct sampling, it will send a `radio` event with `directSampling` type.
-
-You can enable direct sampling mode and specify the channel through the `setDirectSamplingMethod()` method.
+The [`SimpleProvider`](../src/sources/provider.ts) class is an implementation of [`SignalSourceProvider`](../src/radio/signal_source.ts) that takes a [`SignalSource`](../src/radio/signal_source.ts) object in its constructor and always returns that object when `get()` is called.
 
 ```typescript
-// Disable direct sampling
-radio.setDirectSamplingMethod(DirectSampling.Off);
-// Enable direct sampling on the Q channel
-radio.setDirectSamplingMethod(DirectSampling.Q);
-// Enable direct sampling on the I channel
-radio.setDirectSamplingMethod(DirectSampling.I);
+import { tone } from "@jtarrio/demodulator/sources/generators.js";
+import { SimpleProvider } from "@jtarrio/demodulator/sources/provider.js";
+import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+
+let source = new RealTimeSource(tone(14020600, 0.1));
+let provider = new SimpleProvider(source);
 ```
-
-You can also get the current direct sampling method with the `getDirectSamplingMethod()` method.
-
-```typescript
-console.log("Direct sampling:", radio.getDirectSamplingMethod());
-```
-
-By default, direct sampling is disabled.
-
-#### Bias T
-
-Some RTL-SDR devices have a special circuit, called a "bias T," that can provide power to an external device through the antenna connector.
-
-You can turn the bias T on and off through the `enableBiasTee()` method.
-
-```typescript
-radio.enableBiasTee(biasTeeEnabled);
-```
-
-You can get the current status of the bias T with the `isBiasTeeEnabled()` method.
-
-```typescript
-console.log("Bias T:", radio.isBiasTeeEnabled());
-```
-
-By default, the bias T is off.
 
 ## The `SampleReceiver` interface
 
-When the [`Radio`](../src/radio/radio.ts) is playing, it receives a stream of samples from an RTL-SDR device and provides it to a [`SampleReceiver`](../src/radio/sample_receiver.ts) object by calling its `receiveSamples()` method repeatedly.
+When the [`Radio`](../src/radio/radio.ts) is playing, it receives a stream of samples from the signal sources and provides it to a [`SampleReceiver`](../src/radio/sample_receiver.ts) object by calling its `receiveSamples()` method repeatedly.
 
 You can create your own [`SampleReceiver`](../src/radio/sample_receiver.ts) object by implementing this interface.
 
@@ -227,7 +322,7 @@ You can create your own [`SampleReceiver`](../src/radio/sample_receiver.ts) obje
 You don't need to import anything if you use JavaScript. If you use TypeScript, you should import the [`SampleReceiver`](../src/radio/sample_receiver.ts) type:
 
 ```typescript
-import { SampleReceiver } from "@jtarrio/webrtlsdr/radio.js";
+import { SampleReceiver } from "@jtarrio/demodulator/radio.js";
 ```
 
 ### Method `setSampleRate()`
@@ -242,7 +337,7 @@ The `receiveSamples()` method is called by the [`Radio`](../src/radio/radio.ts) 
 
 - `I` (`Float32Array`): the successive values of the samples' I components.
 - `Q` (`Float32Array`): the successive values of the samples' Q components.
-- `frequency` (`number`): the frequency that the RTL-SDR device was tuned to when it received this block of samples.
+- `frequency` (`number`): the frequency that the signal source was tuned to when it received this block of samples.
 
 The `I` and `Q` arrays have the same number of elements, and each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample.
 
@@ -273,7 +368,7 @@ class PowerLogger implements SampleReceiver {
 
 ## The `Demodulator` class
 
-Web RTL-SDR provides a [`Demodulator`](../src/demod/empty-demodulator.ts) class, which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) implementation that can demodulate FM, AM, SSB, and CW signals. By default, it will play the demodulated audio on the speakers or headphones using the Web Audio API, but if you want to do something else (for example, record it in a file or send it over the network), you can provide your own code to do that.
+_Demodulator_ provides a [`Demodulator`](../src/demod/empty-demodulator.ts) class, which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) implementation that can demodulate FM, AM, SSB, and CW signals. By default, it will play the demodulated audio on the speakers or headphones using the Web Audio API, but if you want to do something else (for example, record it in a file or send it over the network), you can provide your own code to do that.
 
 ### Modes
 
@@ -284,7 +379,7 @@ import {
   getMode,
   getSchemes,
   modeParameters,
-} from "@jtarrio/webrtlsdr/demod/modes.js";
+} from "@jtarrio/demodulator/demod/modes.js";
 ```
 
 The `getSchemes()` function returns the names of all available modulation schemes (WBFM, NBFM, AM, USB, LSB, and CW).
@@ -333,7 +428,7 @@ let newMode = params.mode;
 ### Create the demodulator
 
 ```typescript
-import { Demodulator } from "@jtarrio/webrtlsdr/demod/demodulator.js";
+import { Demodulator } from "@jtarrio/demodulator/demod/demodulator.js";
 ```
 
 The [`Demodulator`](../src/demod/empty-demodulator.ts)'s constructor doesn't take any arguments.
@@ -341,8 +436,9 @@ The [`Demodulator`](../src/demod/empty-demodulator.ts)'s constructor doesn't tak
 #### Example
 
 ```typescript
+let provider = new MyProvider();
 let demodulator = new Demodulator();
-let radio = new Radio(new RTL2832U_Provider(), demodulator);
+let radio = new Radio(provider, demodulator);
 ```
 
 ### Events
@@ -485,13 +581,14 @@ class NetworkPlayer {
   }
 }
 
+let provider = new MyProvider();
 let demodulator = new Demodulator(new NetworkPlayer(REMOTE_URL));
-let radio = new Radio(new RTL2832U_Provider(), demodulator);
+let radio = new Radio(provider, demodulator);
 ```
 
 ## Extra goodies
 
-The high-level API has some additional functionalities that can help you build your radio application.
+The Radio API has some additional functionalities that can help you build your application.
 
 ### Use several sample receivers at once
 
@@ -500,13 +597,14 @@ Sometimes you may want the [`Radio`](../src/radio/radio.ts) to send samples to m
 The application achieves this with a [`CompositeReceiver`](../src/radio/sample_receiver.ts). Every time one of the methods of the [`CompositeReceiver`](../src/radio/sample_receiver.ts) object is called, it will call the same method in every component receiver.
 
 ```typescript
-import { CompositeReceiver } from "@jtarrio/webrtlsdr/radio.js";
+import { CompositeReceiver } from "@jtarrio/demodulator/radio.js";
 
+let provider = new MyProvider();
 let demodulator = new Demodulator();
 let spectrum = new Spectrum();
 let otherReceiver = new MySampleReceiver();
 let radio = new Radio(
-  new RTL2832U_Provider(),
+  provider,
   CompositeReceiver.of(demodulator, spectrum, otherReceiver)
 );
 ```
@@ -518,9 +616,10 @@ Use the [`SampleCounter`](../src/radio/sample-counter.ts) to dispatch an event s
 The class constructor takes the number of events per second that should be triggered, and you can listen for its `sample-click` event.
 
 ```typescript
+let provider = new MyProvider();
 // Trigger the event 20 times per second
 let sampleCounter = new SampleCounter(20);
-let radio = new Radio(new RTL2832U_Provider(), sampleCounter);
+let radio = new Radio(provider, sampleCounter);
 sampleCounter.addEventListener("sample-click", onSampleClick);
 
 function onSampleClick() {
@@ -539,13 +638,14 @@ This class also has a `getSpectrum()` method that takes a `Float32Array` that wi
 Each element of the populated array contains the power for that frequency bin in decibels (dB). The first half of the elements contains the positive frequency bins, and the second half contains the negative frequency bins.
 
 ```typescript
-import { Spectrum } from "@jtarrio/webrtlsdr/demod/spectrum.js";
+import { Spectrum } from "@jtarrio/demodulator/demod/spectrum.js";
 
+let provider = new MyProvider();
 let demodulator = new Demodulator();
 let spectrum = new Spectrum();
 let sampleCounter = new SampleCounter(20);
 let radio = new Radio(
-  new RTL2832U_Provider(),
+  provider,
   CompositeReceiver.of(spectrum, demodulator, sampleCounter)
 );
 

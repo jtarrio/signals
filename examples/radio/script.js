@@ -1,11 +1,19 @@
-import { Demodulator } from "@jtarrio/webrtlsdr/demod/demodulator.js";
+import { Demodulator } from "@jtarrio/demodulator/demod/demodulator.js";
 import {
   getMode,
   getSchemes,
   modeParameters,
-} from "@jtarrio/webrtlsdr/demod/modes.js";
-import { Radio } from "@jtarrio/webrtlsdr/radio.js";
-import { DirectSampling, RTL2832U_Provider } from "@jtarrio/webrtlsdr/rtlsdr.js";
+} from "@jtarrio/demodulator/demod/modes.js";
+import { Radio } from "@jtarrio/demodulator/radio/radio.js";
+import {
+  modulateAM,
+  modulateFM,
+  noise,
+  sum,
+  tone,
+} from "@jtarrio/demodulator/sources/generators.js";
+import { SimpleProvider } from "@jtarrio/demodulator/sources/provider.js";
+import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
 
 var elements = {};
 var demodulator;
@@ -13,18 +21,24 @@ var radio;
 var knownModes = {};
 
 async function main() {
+  let source = new RealTimeSource(
+    sum(
+      modulateFM(88500000, 75000, 0.1, tone(600, 0.5)),
+      modulateAM(810000, 0.1, tone(600, 0.5)),
+      tone(14020600, 0.1),
+      noise(0.01)
+    )
+  );
+
   // Create the demodulator and radio and connect them.
   demodulator = new Demodulator();
-  radio = new Radio(new RTL2832U_Provider(), demodulator);
+  radio = new Radio(new SimpleProvider(source), demodulator);
 
   // Set the radio and demodulator parameters.
   radio.setFrequency(88500000);
-  radio.setDirectSamplingMethod(DirectSampling.Off);
-  radio.setFrequencyCorrection(0);
-  radio.setGain(null);
   demodulator.setFrequencyOffset(0);
   demodulator.setVolume(1);
-  demodulator.setMode(getMode("WBFM"));
+  demodulator.setMode(getMode("AM"));
 
   // Receive radio and demodulator events.
   radio.addEventListener("radio", onRadio);
@@ -37,9 +51,6 @@ async function main() {
   elements.stopButton.addEventListener("click", () => radio.stop());
   elements.frequencyInput.addEventListener("change", onFrequencyInputChange);
   elements.offsetInput.addEventListener("change", onOffsetInputChange);
-  elements.ppmInput.addEventListener("change", onPpmInputChange);
-  elements.autoGainBox.addEventListener("change", onAutoGainBoxChange);
-  elements.gainInput.addEventListener("change", onGainInputChange);
   elements.volumeInput.addEventListener("change", onVolumeInputChange);
   elements.schemeSelect.addEventListener("change", onSchemeSelectChange);
   elements.bandwidthInput.addEventListener("change", onBandwidthInputChange);
@@ -60,32 +71,6 @@ function onOffsetInputChange() {
     elements.offsetInput,
     () => demodulator.getFrequencyOffset(),
     (v) => demodulator.setFrequencyOffset(v)
-  );
-}
-
-function onPpmInputChange() {
-  setNumberInput(
-    elements.ppmInput,
-    () => radio.getFrequencyCorrection(),
-    (v) => radio.setFrequencyCorrection(v)
-  );
-}
-
-function onAutoGainBoxChange() {
-  let checked = elements.autoGainBox.checked;
-  elements.gainInput.disabled = checked;
-  if (checked) {
-    radio.setGain(null);
-  } else {
-    onGainChange();
-  }
-}
-
-function onGainInputChange() {
-  setNumberInput(
-    elements.gainInput,
-    () => radio.getGain(),
-    (v) => radio.setGain(v)
   );
 }
 
@@ -171,9 +156,6 @@ function preparePage() {
     "stopButton",
     "frequencyInput",
     "offsetInput",
-    "ppmInput",
-    "autoGainBox",
-    "gainInput",
     "volumeInput",
     "schemeSelect",
     "bandwidthInput",
@@ -196,13 +178,6 @@ function preparePage() {
   elements.stopButton.disabled = !radio.isPlaying();
   elements.frequencyInput.value = String(radio.getFrequency());
   elements.offsetInput.value = String(demodulator.getFrequencyOffset());
-  elements.ppmInput.value = String(radio.getFrequencyCorrection());
-  let gain = radio.getGain();
-  elements.autoGainBox.checked = gain == null;
-  elements.gainInput.disabled = gain == null;
-  if (gain != null) {
-    elements.gainInput.value = String(gain);
-  }
   elements.volumeInput.value = String(
     Math.floor(demodulator.getVolume() * 100)
   );
