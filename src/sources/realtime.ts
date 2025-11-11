@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { Float32RingBuffer, IqBuffer } from "../dsp/buffers.js";
-import { RadioError, RadioErrorType } from "../errors.js";
 import { SampleBlock, SignalSource } from "../radio/signal_source.js";
+import { PendingReadRing } from "./read_ring.js";
 
 /**
  * A function that generates samples.
@@ -32,7 +32,13 @@ export type SampleGenerator = (
   Q: Float32Array
 ) => void;
 
-/** A SignalSource that gets samples from a SampleGenerator function in real time. */
+/**
+ * A SignalSource that gets samples from a SampleGenerator function in real time.
+ *
+ * This source holds a small buffer that it feeds by calling the generator
+ * function. Then, at periodic intervals, it checks if there are any pending
+ * reads and resolves them with the contents of the buffer.
+ */
 export class RealTimeSource implements SignalSource {
   constructor(private generator: SampleGenerator) {
     this.sampleRate = 1024000;
@@ -158,66 +164,5 @@ export class RealTimeSource implements SignalSource {
     this.I.store(I);
     this.Q.store(Q);
     this.lastSampleInBuffer = fillStart + fillCount;
-  }
-}
-
-type ResolveFn = (block: SampleBlock) => void;
-type RejectFn = (reason?: any) => void;
-type PendingRead = { length: number; resolve: ResolveFn; reject: RejectFn };
-
-class PendingReadRing {
-  constructor(length: number) {
-    this.pending = new Array(length);
-    this.writePtr = 0;
-    this.readPtr = 0;
-    this.size = 0;
-  }
-
-  private pending: PendingRead[];
-  private writePtr: number;
-  private readPtr: number;
-  private size: number;
-
-  add(length: number): Promise<SampleBlock> {
-    if (this.size == this.pending.length) {
-      throw new RadioError(
-        "Too many simultaneous reads",
-        RadioErrorType.TransferError
-      );
-    }
-    const { promise, resolve, reject } = Promise.withResolvers<SampleBlock>();
-    this.pending[this.writePtr] = { length, resolve, reject };
-    this.writePtr = (this.writePtr + 1) % this.pending.length;
-    this.size++;
-    return promise;
-  }
-
-  resolve(block: SampleBlock) {
-    if (this.size == 0) return;
-    this.pending[this.readPtr].resolve(block);
-    this.readPtr = (this.readPtr + 1) % this.pending.length;
-    this.size--;
-  }
-
-  cancel() {
-    while (this.size > 0) {
-      this.pending[this.readPtr].reject(
-        new RadioError(
-          "Transfer has been canceled",
-          RadioErrorType.TransferError
-        )
-      );
-      this.readPtr = (this.readPtr + 1) % this.pending.length;
-      this.size--;
-    }
-  }
-
-  hasPendingRead(): boolean {
-    return this.size > 0;
-  }
-
-  nextReadSize(): number {
-    if (this.size == 0) return 0;
-    return this.pending[this.readPtr].length;
   }
 }

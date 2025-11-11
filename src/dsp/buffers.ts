@@ -151,6 +151,13 @@ class RingBuffer<T extends TypedArray<T>> {
     return this.filled;
   }
 
+  /** Empties the ring buffer. */
+  clear() {
+    this.readPos = 0;
+    this.writePos = 0;
+    this.filled = 0;
+  }
+
   /** Copies the provided data into the ring buffer. */
   store(data: T) {
     let count = Math.min(data.length, this.buffer.length);
@@ -169,6 +176,7 @@ class RingBuffer<T extends TypedArray<T>> {
    */
   moveTo(data: T): number {
     let count = Math.min(data.length, this.buffer.length, this.filled);
+    if (count == 0) return 0;
     let { srcOffset } = this.doCopy(count, this.buffer, this.readPos, data, 0);
     this.readPos = srcOffset;
     this.filled -= count;
