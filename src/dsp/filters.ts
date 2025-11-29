@@ -300,7 +300,7 @@ export class IIRLowPassChain implements Filter {
     sampleRate: number,
     freq: number
   ): IIRLowPassChain {
-    return new IIRLowPassChain(
+    return IIRLowPassChain.forTimeConstant(
       count,
       sampleRate,
       frequencyToTimeConstant(freq)
@@ -312,7 +312,11 @@ export class IIRLowPassChain implements Filter {
     sampleRate: number,
     timeConstant: number
   ): IIRLowPassChain {
-    return new IIRLowPassChain(count, sampleRate, timeConstant);
+    return new IIRLowPassChain(
+      count,
+      sampleRate,
+      timeConstant * Math.sqrt(Math.pow(2, 1 / count) - 1)
+    );
   }
 
   private constructor(count: number, sampleRate: number, timeConstant: number) {
@@ -410,18 +414,19 @@ export class PLL {
     this.maxSpeedCorr = (2 * Math.PI * tolerance) / sampleRate;
     this.speedCorrection = 0;
     this.phaseCorrection = 0;
-    this.biFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance * 2.5);
-    this.bqFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance * 2.5);
-    this.siFlt = IIRLowPassChain.forFrequency(4, sampleRate, 20);
-    this.sqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 20);
-    this.piFlt = IIRLowPassChain.forFrequency(4, sampleRate, 20);
-    this.pqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 20);
+    this.biFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance);
+    this.bqFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance);
+    this.siFlt = IIRLowPassChain.forFrequency(4, sampleRate, 7);
+    this.sqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 7);
+    this.piFlt = IIRLowPassChain.forFrequency(4, sampleRate, 250);
+    this.pqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 250);
     this.lbI = 0;
     this.lbQ = 0;
-    this.lockFlt = IIRLowPass.forFrequency(sampleRate, 10);
-    this.lockThreshold = (20 / 360) * 2 * Math.PI / sampleRate;
+    this.sgnLockFlt = IIRLowPass.forFrequency(sampleRate, 10);
+    this.sgnLockThreshold = ((90 / 360) * 2 * Math.PI) / sampleRate;
+    this.absLockFlt = IIRLowPass.forFrequency(sampleRate, 10);
+    this.absLockThreshold = (15 * 2 * Math.PI) / sampleRate;
     this.lockCounter = 0;
-    this.angle = 0;
     this.cos = 1;
     this.sin = 0;
     this.locked = true;
@@ -440,10 +445,11 @@ export class PLL {
   private pqFlt: IIRLowPassChain;
   private lbI: number;
   private lbQ: number;
-  private lockFlt: IIRLowPass;
-  private lockThreshold: number;
+  private sgnLockFlt: IIRLowPass;
+  private sgnLockThreshold: number;
+  private absLockFlt: IIRLowPass;
+  private absLockThreshold: number;
   private lockCounter: number;
-  public angle: number;
   public cos: number;
   public sin: number;
   public locked: boolean;
@@ -466,9 +472,9 @@ export class PLL {
     let phase = this.phase;
 
     // Generate outputs with last computed parameters
-    this.angle = phase + this.speedCorrection + this.phaseCorrection;
-    this.cos = Math.cos(this.angle);
-    this.sin = Math.sin(this.angle);
+    let angle = phase + this.speedCorrection + this.phaseCorrection;
+    this.cos = Math.cos(angle);
+    this.sin = Math.sin(angle);
 
     // Compute (bI, bQ), the beat (difference) between the input and our reference oscillator
     const rawI = Math.cos(-phase) * sample;
@@ -506,10 +512,12 @@ export class PLL {
     const shift = this.biFlt.phaseShift(freqCorrectionHz);
     const phaseDiff = Math.atan2(dQ, dI) - shift;
 
-    // Check if we are locked
-    let deriv = this.lockFlt.add(this.phaseCorrection - phaseDiff);
+    // Check if we are locked (the phase correction is more or less stable)
+    const deriv = this.phaseCorrection - phaseDiff;
+    let sgnDeriv = this.sgnLockFlt.add(deriv);
+    let absDeriv = this.absLockFlt.add(Math.abs(deriv));
     this.phaseCorrection = phaseDiff;
-    if (Math.abs(deriv) < this.lockThreshold) {
+    if (absDeriv < this.absLockThreshold && sgnDeriv < this.sgnLockThreshold) {
       this.lockCounter++;
     } else {
       this.lockCounter = 0;

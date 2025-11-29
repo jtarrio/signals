@@ -32,6 +32,7 @@ import {
   FIRFilter,
   FrequencyShifter,
   IIRLowPass,
+  IIRLowPassChain,
   PLL,
 } from "../../src/dsp/filters.js";
 
@@ -180,12 +181,49 @@ test("IIRLowPass", () => {
       return (o * o) / 2;
     };
 
+    let cf = 1 / (2 * Math.PI * timeConstant * 1e-6);
+    assert.approximately(filterPower(cf), 0.25, 0.005);
+
     for (let i = 300; i < 19000; i += 1000) {
       assert.approximately(
         filterPower(i),
         expectedPower(i),
         0.005,
         `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
+      );
+    }
+  }
+});
+
+test("IIRLowPassChain", () => {
+  const sampleRate = 192000;
+  let cornerFreq = 5000;
+
+  for (let count = 1; count < 5; ++count) {
+    const filterPower = (freq: number) => {
+      let filter = IIRLowPassChain.forFrequency(count, sampleRate, cornerFreq);
+      let tone = sineTone(sampleRate, sampleRate, freq, 1);
+      filter.inPlace(tone);
+      return power(tone.subarray(sampleRate * 0.75));
+    };
+
+    const expectedPower = (freq: number) => {
+      let timeConstant =
+        Math.sqrt(Math.pow(2, 1 / count) - 1) / (2 * Math.PI * cornerFreq);
+      let xr = Math.sqrt(timeConstant);
+      let xc = 1 / (2 * Math.PI * freq * xr);
+      let o = xc / Math.hypot(xr, xc);
+      return Math.pow(o * o, count) / 2;
+    };
+
+    assert.approximately(filterPower(cornerFreq), 0.25, 0.005);
+
+    for (let i = 300; i < 19000; i += 1000) {
+      assert.approximately(
+        filterPower(i),
+        expectedPower(i),
+        0.005,
+        `Mismatch in frequency response for ${i} Hz with count ${count}`
       );
     }
   }
@@ -223,17 +261,17 @@ test("PLL", () => {
     [19002, 1, Math.PI - 0.01, 0, 2e-4],
     [18998, 1, Math.PI - 0.01, 0, 2e-4],
     [19000, 0.5, 0, 0.1, 1e-3],
-    [19002, 0.5, 0, 0.1, 2e-3],
-    [18998, 0.5, 0, 0.1, 2e-3],
-    [19000, 0.5, Math.PI / 2, 0.1, 2e-3],
-    [19002, 0.5, Math.PI / 2, 0.1, 2e-3],
-    [18998, 0.5, Math.PI / 2, 0.1, 2e-3],
-    [19000, 0.2, 0, 0.1, 2e-3],
-    [19002, 0.2, 0, 0.1, 2e-3],
-    [18998, 0.2, 0, 0.1, 2e-3],
-    [19000, 0.2, Math.PI / 2, 0.1, 2e-3],
-    [19002, 0.2, Math.PI / 2, 0.1, 2e-3],
-    [18998, 0.2, Math.PI / 2, 0.1, 2e-3],
+    [19002, 0.5, 0, 0.1, 1e-3],
+    [18998, 0.5, 0, 0.1, 1e-3],
+    [19000, 0.5, Math.PI / 2, 0.1, 1e-3],
+    [19002, 0.5, Math.PI / 2, 0.1, 1e-3],
+    [18998, 0.5, Math.PI / 2, 0.1, 1e-3],
+    [19000, 0.2, 0, 0.1, 1e-3],
+    [19002, 0.2, 0, 0.1, 1e-3],
+    [18998, 0.2, 0, 0.1, 1e-3],
+    [19000, 0.2, Math.PI / 2, 0.1, 1e-3],
+    [19002, 0.2, Math.PI / 2, 0.1, 1e-3],
+    [18998, 0.2, Math.PI / 2, 0.1, 1e-3],
   ];
 
   for (let testCase of cases) {
@@ -243,12 +281,9 @@ test("PLL", () => {
 
     let pll = new PLL(sampleRate, 19000, 10);
     let output = new Float32Array(input.length);
-    let locklen = 0;
     for (let i = 0; i < output.length; ++i) {
       pll.add(input[i]);
       output[i] = pll.cos * toneAmpl;
-      if (pll.locked) locklen++;
-      else locklen = 0;
     }
 
     assert.isTrue(

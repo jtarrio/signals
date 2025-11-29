@@ -20,7 +20,7 @@ export function iq(length: number): IQ {
 }
 
 // Computes the root-mean-square difference of two arrays
-export function rmsd(a: Float32Array, b: Float32Array): number {
+export function rmsd<T extends ArrayLike<any>>(a: T, b: T): number {
   const num = Math.min(a.length, b.length);
   let sum = 0;
   for (let i = 0; i < num; ++i) {
@@ -132,6 +132,7 @@ export function iqRealSineTone(
 export function noise(length: number, amplitude: number): Float32Array {
   let rnd = new PRNG(0x1234_5678_abcd_ef01n);
   return new Float32Array(length).map((_) => amplitude * rnd.next());
+  // return new Float32Array(length).map(_ => amplitude * Math.random());
 }
 
 // PRNG from Widynski, Bernard (2020). "Squares: A Fast Counter-Based RNG". https://doi.org/10.48550/arXiv.2004.06278
