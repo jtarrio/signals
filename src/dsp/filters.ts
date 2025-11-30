@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { atan2 } from "./math.js";
+
 export interface Filter {
   /** Returns a newly initialized clone of this filter. */
   clone(): Filter;
@@ -486,13 +488,14 @@ export class PLL {
     // The beat is going to lag or advance wrt the input because of the input filter chain
 
     // Compute (sI, sQ), the average phase speed of (bI, bQ). That's the difference in frequency.
+    // rs = b * conj(lb)
     const rsI = this.lbI * bI + this.lbQ * bQ;
     const rsQ = this.lbI * bQ - bI * this.lbQ;
     const sI = this.siFlt.add(rsI);
     const sQ = this.sqFlt.add(rsQ);
     this.lbI = bI;
     this.lbQ = bQ;
-    const beatSpeed = Math.atan2(sQ, sI);
+    const beatSpeed = atan2(sQ, sI);
     const speedCorr = Math.max(
       -this.maxSpeedCorr,
       Math.min(beatSpeed, this.maxSpeedCorr)
@@ -503,6 +506,7 @@ export class PLL {
     // That's the difference in phase.
     const cI = Math.cos(this.speedCorrection);
     const cQ = Math.sin(this.speedCorrection);
+    // rd = b * conj(c)
     const rdI = bI * cI + bQ * cQ;
     const rdQ = cI * bQ - bI * cQ;
     const dI = this.piFlt.add(rdI);
@@ -510,7 +514,7 @@ export class PLL {
     // But the biFlt/bqFlt are going to shift the phase of (bI, bQ), so compensate for that.
     const freqCorrectionHz = (speedCorr * this.sampleRate) / (2 * Math.PI);
     const shift = this.biFlt.phaseShift(freqCorrectionHz);
-    const phaseDiff = Math.atan2(dQ, dI) - shift;
+    const phaseDiff = atan2(dQ, dI) - shift;
 
     // Check if we are locked (the phase correction is more or less stable)
     const deriv = this.phaseCorrection - phaseDiff;

@@ -16,6 +16,7 @@
 import { makeHilbertKernel } from "./coefficients.js";
 import { decay, FIRFilter, PLL } from "./filters.js";
 import { Float32Buffer } from "./buffers.js";
+import { atan2 } from "./math.js";
 
 /** The sideband to demodulate. */
 export enum Sideband {
@@ -113,12 +114,13 @@ export class FMDemodulator {
       let imag = lI * Q[i] - I[i] * lQ;
       lI = I[i];
       lQ = Q[i];
-      out[i] = Math.atan2(imag, real) * mul;
+      out[i] = atan2(imag, real) * mul;
     }
     this.lI = lI;
     this.lQ = lQ;
   }
 }
+
 
 /** A class to demodulate the stereo signal in a demodulated FM signal. */
 export class StereoSeparator {
@@ -153,44 +155,5 @@ export class StereoSeparator {
       found: this.pll.locked,
       diff: out,
     };
-  }
-}
-
-/** An exponential moving average accumulator. */
-class ExpAverage {
-  /**
-   * @param weight Weight of the previous average value.
-   * @param wantStd Whether to calculate the standard deviation.
-   */
-  constructor(private weight: number, private wantStd?: boolean) {
-    this.avg = 0;
-    this.std = 0;
-  }
-
-  private avg: number;
-  private std: number;
-
-  /**
-   * Adds a value to the moving average.
-   * @param value The value to add.
-   * @returns The moving average.
-   */
-  add(value: number): number {
-    const weight = this.weight;
-    this.avg = (weight * this.avg + value) / (weight + 1);
-    if (this.wantStd) {
-      this.std =
-        (weight * this.std + (value - this.avg) * (value - this.avg)) /
-        (weight + 1);
-    }
-    return this.avg;
-  }
-
-  /**
-   * Returns the moving standard deviation.
-   * @param The moving standard deviation.
-   */
-  getStd() {
-    return this.std;
   }
 }
