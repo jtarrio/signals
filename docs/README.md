@@ -14,6 +14,6 @@ npm install @jtarrio/demodulator
 
 ## Using _Demodulator_
 
-- Creating a radio demodulator through the [Radio API](radio.md)
+- Demodulating and playing signals in real time through the [Radio API](radio.md)
 - Writing a [new modulation scheme](new-demod.md) for the Radio API
 - Using the [built-in DSP library](dsp.md)

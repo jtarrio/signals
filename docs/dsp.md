@@ -47,7 +47,21 @@ let iq1 = iqbuffer.get(1024); // iq[0] is a Float32Array and iq[1] is another Fl
 
 In the [`dsp/buffers.ts`](../src/dsp/buffers.ts) file, the `Float32RingBuffer` class implements a ring buffer for 32-bit floating-point elements.
 
-A ring buffer contains a fixed number of elements, "_N_". When you store data into it, the oldest data is overwritten with the new data. You can get up to "_N_" elements out of the ring buffer, and those will always be the latest added elements.
+A ring buffer has a maximum capacity, "_N_". When you store data into it and the ring buffer is already full, the oldest data is overwritten with the new data.
+
+Use the `store()` function to copy data into the ring buffer.
+
+You can read from the ring buffer in two ways: with the `copyTo()` function and with the `moveTo()` function. Both functions take the array you want to store the data in.
+
+The `copyTo()` function copies the latest added elements into the destination buffer (up to the ring buffer's size). If the destination array is smaller than the ring buffer, the last element copied to the destination array will be the last element added to the ring buffer. You can call `copyTo()` several times without adding more data to the ring buffer, and it will copy out the same data every time.
+
+The `moveTo()` function, however, moves elements into the destination buffer in the same order in which they were added. If the destination array is smaller than the number of available elements in the ring buffer, the next call to `moveTo()` will start the move from the element that follows the last element moved previously. If the destination array is larger than the number of available elements, only the number of available elements will be copied to the array. The function returns the number of elements that were copied.
+
+The ring buffer also has two read-only properties: `capacity`, which indicates the maximum number of elements that can be stored in the ring buffer, and `available`, which is the number of elements that can be moved out with `moveTo()`.
+
+Note that `moveTo()` does not affect the data that will be returned by `copyTo()`; the `copyTo()` function _always_ returns the latest added elements.
+
+How to use a ring buffer as a fixed-size buffer:
 
 ```typescript
 import { Float32RingBuffer } from "@jtarrio/demodulator/dsp/buffers.js";
@@ -63,6 +77,27 @@ for (let i = 0; i < 5; i++) {
 let latest = new Float32Array(64);
 rb.copyTo(latest);
 // Now `latest` contains the last 64 elements of the data provided by `getSomeSamples()`.
+```
+
+How to use a ring buffer to decouple differently-sized reads and writes:
+
+```typescript
+import { Float32RingBuffer } from "@jtarrio/demodulator/dsp/buffers.js";
+
+let rb = new Float32RingBuffer(128);
+
+let output = new Float32Array(96);
+// Simulate a process that generates 64 items every time
+// and another process that wants to receive 96 items each time.
+for (let i = 0; i < 100; ++i) {
+  // Store 64 bytes on each iteration of the loop
+  let input = new Float32Array(64);
+  rb.store(input);
+  // Move data out of the buffer whenever there is enough.
+  while (rb.available >= output.length) {
+    rb.moveTo(output);
+  }
+}
 ```
 
 ## Filters
@@ -121,25 +156,49 @@ for (let i = 0; i < out.length; ++i) {
 }
 ```
 
-### De-emphasis filter
+### IIR low-pass filter
 
-The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains a `Deemphasizer` class that implements a 1-pole low-pass IIR filter that takes a time constant (in microseconds) as its parameter.
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains an `IIRLowPass` class that implements a 1-pole low-pass IIR filter. This class has two constructors: one that takes a time constant (`IIRLowPass.forTimeConstant()`), and another that takes a -3dB corner frequency (`IIRLowPass.forFrequency()`.)
 
 ```typescript
-import { Deemphasizer } from "@jtarrio/demodulator/dsp/filters.js";
+import { IIRLowPass } from "@jtarrio/demodulator/dsp/filters.js";
 
 const sampleRate = 1024000;
-const tc = 50; // microseconds
-let deemph = new Deemphasizer(sampleRate, tc);
+const tc = 50e-6; // 50 microseconds
+let deemph = IIRLowPass.forTimeConstant(sampleRate, tc);
 
 // Filter in place
 let samples: Float32Array = getSomeSamples();
 deemph.inplace(samples);
 ```
 
+There is also an `IIRLowPassChain` class that implements a chain of 1, 2, or more `IIRLowPass` filters, all with the same arguments. This lets you build filters with steeper frequency rolloffs (-20 dB/decade for each filter in the chain.) The `forTimeConstant` and `forFrequency` functions have been adjusted so that the whole chain of filters will display -3 dB response at the specified corner frequency, just like for `IIRLowPass`.
+
 ### DC blocker
 
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains a `DCBlocker` class to adaptively remove a signal at frequency 0.
+
+### Phase-locked loop
+
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `PLL` class that implements a phase-locked loop that can follow a real sinusoidal wave of a specified frequency with a specified tolerance. This implementation is optimized to follow a steady 19,000 Hz tone, but it should be usable for any frequency.
+
+```typescript
+import { PLL } from "@jtarrio/demodulator/dsp/filters.js";
+
+const sampleRate = 336000;
+let pll = new PLL(sampleRate, 19000, 10);
+
+let samples: Float32Array = getSomeSamplesWithA19000HertzTone();
+let outputCos = new Float32Array(samples.length);
+for (let i = 0; i < samples.length; ++i) {
+  pll.add(samples[i]);
+  outputCos[i] = pll.cos;
+}
+// Now outputCos contains a sinusoidal wave that's synchronized
+// to a 19000 Hertz tone that is present in the input.
+// You can use pll.sin if you need a -90-degree phase shifted sinusoidal.
+// You can use pll.locked to know if the PLL is locked onto a tone.
+```
 
 ## Frequency shifter
 
