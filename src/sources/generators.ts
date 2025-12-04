@@ -37,10 +37,10 @@ export function tone(freq: number, amplitude: number): SampleGenerator {
     const c = Math.cos(f);
     const d = Math.sin(f);
     for (let i = 0; i < I.length; ++i) {
+      I[i] = a * amplitude;
+      Q[i] = b * amplitude;
       const xa = a * c - b * d;
       const xb = b * c + a * d;
-      I[i] = xa * amplitude;
-      Q[i] = xb * amplitude;
       a = xa;
       b = xb;
     }
@@ -190,11 +190,11 @@ export function modulateFM(
     let sigSum = 0;
     let p = phase;
     for (let i = 0; i < I.length; ++i) {
-      sigSum += J[i];
-      p += delta + maxF * J[i];
       const angle = 2 * Math.PI * p;
       I[i] = amplitude * Math.cos(angle);
       Q[i] = amplitude * Math.sin(angle);
+      p += delta + maxF * J[i];
+      sigSum += J[i];
     }
     phase += delta * I.length + maxF * sigSum;
     phase -= Math.floor(phase);

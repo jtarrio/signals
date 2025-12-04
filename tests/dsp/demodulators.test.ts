@@ -92,7 +92,7 @@ test("AMDemodulator", () => {
       new Float32Array(sampleRate)
     );
 
-    return modulus(transformed, freq);
+    return modulus(transformed, freq) * 2;
   };
 
   // For different carrier offsets and carrier/signal amplitudes,
@@ -119,7 +119,7 @@ test("AMDemodulator", () => {
 test("FMDemodulator", () => {
   const sampleRate = 48000;
   const len = sampleRate / 10;
-  const maxDev = 10000;
+  const maxDev = 5000;
   let demod = new FMDemodulator(maxDev / sampleRate);
 
   for (let f = -maxDev; f <= maxDev; f += maxDev / 20) {
@@ -131,10 +131,36 @@ test("FMDemodulator", () => {
     expected.fill(f / maxDev);
     assert.isAtMost(
       rmsd(expected.subarray(len / 2), output.subarray(len / 2)),
-      0.001,
+      1e-7,
       `Mismatch in received value for deviation ${f}`
     );
   }
+
+  let signal = Array.from({ length: len }).map(
+    (_, i) =>
+      (Math.cos((2 * Math.PI * 2500 * i) / sampleRate) +
+        Math.sin((2 * Math.PI * 57 * i) / sampleRate)) /
+      2
+  );
+  let angle = new Array(len);
+  angle[0] = 0;
+  for (let i = 1; i < angle.length; ++i) {
+    angle[i] =
+      angle[i - 1] + (2 * Math.PI * maxDev * signal[i - 1]) / sampleRate;
+  }
+  let I = new Float32Array(angle.map((a) => Math.cos(a)));
+  let Q = new Float32Array(angle.map((a) => Math.sin(a)));
+
+  let expected = new Float32Array(len).map((_, i) =>
+    i == 0
+      ? 1
+      : (Math.cos((2 * Math.PI * 2500 * (i - 1)) / sampleRate) +
+          Math.sin((2 * Math.PI * 57 * (i - 1)) / sampleRate)) /
+        2
+  );
+  let out = new Float32Array(len);
+  demod.demodulate(I, Q, out);
+  assert.isAtMost(rmsd(out, expected), 0.03);
 });
 
 test("StereoSeparator - with stereo signal", () => {

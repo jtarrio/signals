@@ -58,6 +58,9 @@ export class DemodSSB implements Demod<ModeSSB> {
     this.mode = mode;
     const kernel = makeLowPassKernel(this.outRate, mode.bandwidth / 2, 151);
     this.filter.setCoefficients(kernel);
+    this.demodulator.setSideband(
+      mode.scheme == "USB" ? Sideband.Upper : Sideband.Lower
+    );
   }
 
   /**

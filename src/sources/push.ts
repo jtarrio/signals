@@ -23,7 +23,7 @@ import { PendingReadRing } from "./read_ring.js";
  * or callbacks that arrive regularly (push events).
  *
  * Whenever you receive the push event or callback, you must call
- * newSamples(). This function will use the provided samples to resolve
+ * pushSamples(). This function will use the provided samples to resolve
  * pending reads, and then store the remainder in a buffer.
  *
  * The push source is expected to deliver its signals in real time.
@@ -64,7 +64,7 @@ export class PushSource implements SignalSource {
     this.Q.clear();
   }
 
-  protected newSamples(I: Float32Array, Q: Float32Array, frequency?: number) {
+  pushSamples(I: Float32Array, Q: Float32Array, frequency?: number) {
     if (frequency !== undefined) this.centerFrequency = frequency;
 
     let pos = 0;

@@ -64,18 +64,6 @@ export function power(s: Float32Array): number {
   return sum / num;
 }
 
-// Returns a signal's average power.
-export function iqPower(s: IQ): number {
-  const num = s.length;
-  let sum = 0;
-  for (let c = 0; c < 2; ++c) {
-    for (let i = 0; i < num; ++i) {
-      sum += s[c][i] * s[c][i];
-    }
-  }
-  return sum / num;
-}
-
 // Returns a sine tone
 export function sineTone(
   length: number,
@@ -191,12 +179,6 @@ export function multiply(
       a[j] *= r[j];
     }
   }
-  return a;
-}
-
-// Amplifies a signal
-export function amplify(a: Float32Array, amount: number): Float32Array {
-  for (let i = 0; i < a.length; ++i) a[i] *= amount;
   return a;
 }
 

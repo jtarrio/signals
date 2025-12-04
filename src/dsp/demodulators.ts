@@ -41,6 +41,11 @@ export class SSBDemodulator {
   private filterHilbert: FIRFilter;
   private hilbertMul: number;
 
+  /** Switches the demodulator's sideband on the fly. */
+  setSideband(sideband: Sideband) {
+    this.hilbertMul = sideband == Sideband.Upper ? -1 : 1;
+  }
+
   /** Demodulates the given I/Q samples into the real output. */
   demodulate(I: Float32Array, Q: Float32Array, out: Float32Array) {
     this.filterDelay.loadSamples(I);
@@ -77,8 +82,7 @@ export class AMDemodulator {
       const power = vI * vI + vQ * vQ;
       const amplitude = Math.sqrt(power);
       carrierAmplitude += alpha * (amplitude - carrierAmplitude);
-      out[i] =
-        carrierAmplitude == 0 ? 0 : 2 * (amplitude / carrierAmplitude - 1);
+      out[i] = carrierAmplitude == 0 ? 0 : amplitude / carrierAmplitude - 1;
     }
     this.carrierAmplitude = carrierAmplitude;
   }
@@ -110,6 +114,7 @@ export class FMDemodulator {
     let lI = this.lI;
     let lQ = this.lQ;
     for (let i = 0; i < I.length; ++i) {
+      // s = s * conj(l)
       let real = lI * I[i] + lQ * Q[i];
       let imag = lI * Q[i] - I[i] * lQ;
       lI = I[i];
@@ -120,7 +125,6 @@ export class FMDemodulator {
     this.lQ = lQ;
   }
 }
-
 
 /** A class to demodulate the stereo signal in a demodulated FM signal. */
 export class StereoSeparator {

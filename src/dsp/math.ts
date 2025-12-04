@@ -13,9 +13,12 @@
 // limitations under the License.
 
 /**
- * A faster (~3x) and slightly less precise version of Math.atan2. It's still good to 1/6000 of a degree.
- *
- * Adapted from https://mazzo.li/posts/vectorized-atan2.html
+ * A faster (~3x) and slightly less precise version of Math.atan2.
+ * It's plenty good for Float32 (maximum error 4e-8).
+ * Coefficients from "Approximations for digital computers",
+ * by Cecil Hastings, Jr., assisted by Jeanne T. Hayward and James P. Wong, Jr.,
+ * (Princeton University Press, 1955),
+ * found through https://mazzo.li/posts/vectorized-atan2.html
  */
 export function atan2(imag: number, real: number): number {
   let swap = Math.abs(real) < Math.abs(imag);
@@ -24,13 +27,18 @@ export function atan2(imag: number, real: number): number {
   const divSq = div * div;
   let res =
     div *
-    (0.99997726 +
+    (0.9999993329 +
       divSq *
-        (-0.33262347 +
+        (-0.3332985605 +
           divSq *
-            (0.19354346 +
+            (0.1994653599 +
               divSq *
-                (-0.11643287 + divSq * (0.05265332 + divSq * -0.0117212)))));
+                (-0.1390853351 +
+                  divSq *
+                    (0.0964200441 +
+                      divSq *
+                        (-0.0559098861 +
+                          divSq * (0.0218612288 + divSq * -0.004054058)))))));
 
   if (swap) {
     if (div >= 0) {

@@ -16,14 +16,14 @@ import { test, assert } from "vitest";
 import { atan2 } from "../../src/dsp/math.js";
 
 test("atan2", () => {
-  for (let i = 0; i < 1000; ++i) {
-    let I = Math.random() * 2 - 1;
-    let Q = Math.random() * 2 - 1;
-    let angle = Math.atan2(Q, I);
-    assert.approximately(
-      atan2(Q, I),
-      angle,
-      (1 / 6000) * ((2 * Math.PI) / 360)
-    );
+  for (let i = 0; i < 10000; ++i) {
+    let angle = (2 * Math.PI * i) / 10000;
+    let I = Math.cos(angle);
+    let Q = Math.sin(angle);
+    let expected = Math.atan2(Q, I);
+    // We are comparing to Math.atan2 and not to the original angle
+    // because sin/cos will bring their own errors into play,
+    // and our benchmark is atan2 anyway.
+    assert.approximately(atan2(Q, I), expected, 4e-8, `For angle ${angle}`);
   }
 });
