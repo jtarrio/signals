@@ -43,7 +43,7 @@ Your demodulator must implement the [`Demod<M extends Mode>`](../src/demod/modes
 
 Your [`Demod<M extends Mode>`](../src/demod/modes.ts) object must also have a constructor with this form:
 
-- `constructor(inRate: number, private outRate: number, mode: M)` — takes the input sample rate, output sample rate, and the initial mode parameters.
+- `constructor(inRate: number, private outRate: number, mode: M, options?: object)` — takes the input sample rate, output sample rate, the initial mode parameters, and an optional options object.
 
 The [`Demodulated`](../src/demod/modes.ts) object has the following fields:
 
@@ -204,15 +204,20 @@ You can build your own WBFM demodulator that uses the output of stage 1 to extra
 
 You can even register it as `WBFM` and it will replace the original `WBFM` demodulator.
 
-### Example 1
+### Example
 
 ```typescript
 export class DemodWBFMWithDecoder implements Demod<ModeWBFM> {
-  constructor(inRate: number, outRate: number, private mode: ModeWBFM) {
+  constructor(
+    inRate: number,
+    outRate: number,
+    private mode: ModeWBFM,
+    options?: OptionsWBFMWithDecoder
+  ) {
     let interRate = Math.min(inRate, 336000);
     this.stage1 = new DemodWBFMStage1(inRate, interRate, mode);
-    this.myDecoder = new MyDecoder(interRate, mode);
-    this.stage2 = new DemodWBFMStage2(interRate, outRate, mode);
+    this.myDecoder = new MyDecoder(interRate, mode, options);
+    this.stage2 = new DemodWBFMStage2(interRate, outRate, mode, options);
   }
 
   private stage1: DemodWBFMStage1;
@@ -245,49 +250,4 @@ export class DemodWBFMWithDecoder implements Demod<ModeWBFM> {
 }
 
 registerDemod("WBFM", DemodWBFMWithDecoder, ConfigWBFM);
-```
-
-### Example 2
-
-```typescript
-export function DemodWBFMWithParam(param: number): DemodConstructor<ModeWBFM> {
-  return class implements Demod<ModeWBFM> {
-    constructor(inRate: number, outRate: number, private mode: ModeWBFM) {
-      let interRate = Math.min(inRate, 336000);
-      this.stage1 = new DemodWBFMStage1(inRate, interRate, mode);
-      this.myDecoder = new MyDecoder(param, interRate, mode);
-      this.stage2 = new DemodWBFMStage2(interRate, outRate, mode);
-    }
-
-    private stage1: DemodWBFMStage1;
-    private myDecoder: MyDecoder;
-    private stage2: DemodWBFMStage2;
-
-    getMode(): ModeWBFM {
-      return this.mode;
-    }
-
-    setMode(mode: ModeWBFM) {
-      this.mode = mode;
-      this.stage1.setMode(mode);
-      this.myDecoder.setMode(mode);
-      this.stage2.setMode(mode);
-    }
-
-    demodulate(
-      samplesI: Float32Array,
-      samplesQ: Float32Array,
-      freqOffset: number
-    ): Demodulated {
-      let o1 = this.stage1.demodulate(samplesI, samplesQ, freqOffset);
-      this.myDecoder.decode(o1.left);
-      let o2 = this.stage2.demodulate(o1.left);
-
-      o2.snr = o1.snr;
-      return o2;
-    }
-  };
-}
-
-registerDemod("WBFM", DemodWBFMWithParam(12345), ConfigWBFM);
 ```

@@ -98,14 +98,21 @@ export function getMode(scheme: string): Mode {
   return new reg.config(scheme).mode;
 }
 
-/** Returns a Scheme object for the given mode. */
+/**
+ * Returns a Scheme object for the given mode.
+ * @param inRate the rate of the samples received by the demodulator.
+ * @param outRate the rate of the samples output by the demodulator.
+ * @param mode mode parameters (bandwidth, squelch, etc.)
+ * @param options options for the demodulator.
+ */
 export function getDemod<M extends Mode>(
   inRate: number,
   outRate: number,
-  mode: M
+  mode: M,
+  options?: object
 ): Demod<M> {
   let reg = getRegisteredDemod(mode);
-  return new reg.demod(inRate, outRate, mode);
+  return new reg.demod(inRate, outRate, mode, options);
 }
 
 /** Returns accessors for the mode's or scheme's parameters. */
@@ -175,7 +182,8 @@ export abstract class Configurator<M extends Mode> {
 export type DemodConstructor<M extends Mode> = new (
   inRate: number,
   outRate: number,
-  mode: M
+  mode: M,
+  options?: object
 ) => Demod<M>;
 
 /** The type for a constructor of a Configurator object. */

@@ -317,7 +317,7 @@ The `FFT` class has the following methods:
 - `transformCircularBuffers(real: Float32RingBuffer, imag: Float32RingBuffer): FFTOutput` — computes the FFT for the latest samples stored in the `real` and `imag` circular buffers.
 - `reverse(real: Float32Array, imag: Float32Array): FFTOutput` — computes the reverse FFT for the complex samples provided by `real` and `imag`.
 
-The `FFTOutput` type is an object with the fields `real` and `imag`, both of type `Float32Array`.
+The `FFTOutput` type is an array with two elements, both of type `Float32Array`. Each element of the first array contains the `I` component of a sample, and the corresponding element of the second array contains its `Q` component.
 
 The [`dsp/coefficients.ts`](../src/dsp/coefficients.ts) file contains an implementation of the Blackman window in the `makeBlackmanWindow()` method.
 

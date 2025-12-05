@@ -17,6 +17,18 @@ import { Player } from "./player.js";
 import { AudioPlayer } from "../players/audioplayer.js";
 import { SampleReceiver } from "../radio/sample_receiver.js";
 
+type DemodulatorOptions = {
+  /**
+   * The player to use. If undefined, an AudioPlayer will be used.
+   */
+  player?: Player;
+  /**
+   * Options for each mode. This is an object whose keys are registered mode names
+   * and the values are objects sent to the mode constructor.
+   */
+  modeOptions?: { [key: Mode["scheme"]]: object };
+};
+
 /**
  * A class that takes a stream of radio samples and demodulates
  * it into an audio signal.
@@ -30,13 +42,14 @@ import { SampleReceiver } from "../radio/sample_receiver.js";
  */
 export class Demodulator extends EventTarget implements SampleReceiver {
   /**
-   * @param player The player to use. If undefined, an AudioPlayer will be used.
+   * @param options Options for the demodulator.
    */
-  constructor(player?: Player) {
+  constructor(options?: DemodulatorOptions) {
     super();
     this.inRate = 1024000;
-    this.player = player ? player : new AudioPlayer();
+    this.player = options?.player || new AudioPlayer();
     this.squelchControl = new SquelchControl(this.player.sampleRate);
+    this.modeOptions = options?.modeOptions || {};
     this.mode = getMode("WBFM");
     this.demod = this.getScheme(this.mode);
     this.frequencyOffset = 0;
@@ -49,6 +62,8 @@ export class Demodulator extends EventTarget implements SampleReceiver {
   private player: Player;
   /** Controller that silences the output if the SNR is low. */
   private squelchControl: SquelchControl;
+  /** Options for the different modes. */
+  private modeOptions: { [key: Mode["scheme"]]: object };
   /** The modulation parameters as a Mode object. */
   private mode: Mode;
   /** The demodulator class. */
@@ -103,7 +118,12 @@ export class Demodulator extends EventTarget implements SampleReceiver {
       return demod;
     }
 
-    return getDemod(this.inRate, this.player.sampleRate, mode);
+    return getDemod(
+      this.inRate,
+      this.player.sampleRate,
+      mode,
+      this.modeOptions[mode.scheme]
+    );
   }
 
   /** Changes the sample rate. */
