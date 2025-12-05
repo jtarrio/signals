@@ -77,8 +77,7 @@ export class Spectrum implements SampleReceiver {
       this.lastOutput.fill(-Infinity);
       for (let i = 0; i < this.lastOutput.length; ++i) {
         this.lastOutput[i] =
-          10 *
-          Math.log10(fft.real[i] * fft.real[i] + fft.imag[i] * fft.imag[i]);
+          10 * Math.log10(fft[0][i] * fft[0][i] + fft[1][i] * fft[1][i]);
       }
       this.dirty = false;
     }
