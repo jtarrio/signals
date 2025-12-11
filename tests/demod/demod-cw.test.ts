@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { test, assert, describe } from "vitest";
-import { IQ, modulus } from "../testutil.js";
+import { IQ, modulus, prng } from "../testutil.js";
 import { ConfigCW, DemodCW, ModeCW } from "../../src/demod/demod-cw.js";
 import {
   getMode,
@@ -56,7 +56,7 @@ describe("DemodCW", () => {
 
     const demodulate = (freq: number, noiseAmpl?: number) => {
       let modulated = tone(freq, 0.1);
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl));
+      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
       let I = new Float32Array(inLen);
       let Q = new Float32Array(inLen);
       modulated(0, inSampleRate, 0, I, Q);

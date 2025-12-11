@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Float32Buffer } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator, StereoSeparator } from "../dsp/demodulators.js";
-import { FrequencyShifter, IIRLowPass, FIRFilter } from "../dsp/filters.js";
+import { Deemphasis, FIRFilter, FrequencyShifter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler, RealDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -171,20 +172,24 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
   ) {
     const pilotF = 19000;
     const deemphTc =
-      (options?.deemphasizerTc === undefined ? 50 : options.deemphasizerTc) *
-      1e-6;
-    this.monoSampler = new RealDownsampler(inRate, outRate, 41);
-    this.stereoSampler = new RealDownsampler(inRate, outRate, 41);
+      (options?.deemphasizerTc === undefined ? 50 : options.deemphasizerTc) /
+      1e6;
+    const filterF = Math.min(15000, outRate / 2);
+    const kernel = makeLowPassKernel(inRate, filterF, 41, 1 / 0.45);
+    this.monoSampler = new RealDownsampler(inRate, outRate, kernel);
+    this.stereoSampler = new RealDownsampler(inRate, outRate, kernel);
     this.stereoSeparator = new StereoSeparator(inRate, pilotF);
-    this.leftDeemph = IIRLowPass.forTimeConstant(outRate, deemphTc);
-    this.rightDeemph = IIRLowPass.forTimeConstant(outRate, deemphTc);
+    this.leftDeemph = new Deemphasis(outRate, deemphTc);
+    this.rightDeemph = new Deemphasis(outRate, deemphTc);
+    this.outBuffer = new Float32Buffer(2, 1024);
   }
 
   private monoSampler: RealDownsampler;
   private stereoSampler: RealDownsampler;
   private stereoSeparator: StereoSeparator;
-  private leftDeemph: IIRLowPass;
-  private rightDeemph: IIRLowPass;
+  private leftDeemph: Deemphasis;
+  private rightDeemph: Deemphasis;
+  private outBuffer: Float32Buffer;
 
   getMode(): ModeWBFM {
     return this.mode;
@@ -200,28 +205,34 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
    * @returns The demodulated audio signal.
    */
   demodulate(samplesI: Float32Array): Demodulated {
-    const leftAudio = this.monoSampler.downsample(samplesI);
-    const rightAudio = new Float32Array(leftAudio);
-    let stereoOut = false;
+    let audio = this.monoSampler.downsample(samplesI);
 
     if (this.mode.stereo) {
       const stereo = this.stereoSeparator.separate(samplesI);
       if (stereo.found) {
-        stereoOut = true;
         const diffAudio = this.stereoSampler.downsample(stereo.diff);
+        let leftAudio = this.outBuffer.get(audio.length);
+        let rightAudio = audio;
         for (let i = 0; i < diffAudio.length; ++i) {
-          rightAudio[i] -= diffAudio[i];
-          leftAudio[i] += diffAudio[i];
+          leftAudio[i] = (audio[i] - diffAudio[i]) / 2;
+          rightAudio[i] = (audio[i] + diffAudio[i]) / 2;
         }
+        this.leftDeemph.inPlace(leftAudio);
+        this.rightDeemph.inPlace(rightAudio);
+        return {
+          left: leftAudio,
+          right: rightAudio,
+          stereo: true,
+          snr: 1,
+        };
       }
     }
 
-    this.leftDeemph.inPlace(leftAudio);
-    this.rightDeemph.inPlace(rightAudio);
+    this.leftDeemph.inPlace(audio);
     return {
-      left: leftAudio,
-      right: rightAudio,
-      stereo: stereoOut,
+      left: audio,
+      right: new Float32Array(audio),
+      stereo: false,
       snr: 1,
     };
   }

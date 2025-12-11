@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { test, assert, describe } from "vitest";
-import { IQ, modulus } from "../testutil.js";
+import { IQ, modulus, prng } from "../testutil.js";
 import { ConfigAM, DemodAM, ModeAM } from "../../src/demod/demod-am.js";
 import {
   getMode,
@@ -57,7 +57,7 @@ describe("DemodAM", () => {
 
     const demodulate = (signal: SampleGenerator, noiseAmpl?: number) => {
       let modulated = modulateAM(carrierFreq, 0.1, signal);
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl));
+      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
       let I = new Float32Array(inLen);
       let Q = new Float32Array(inLen);
       modulated(0, inSampleRate, 0, I, Q);

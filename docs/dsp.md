@@ -156,23 +156,35 @@ for (let i = 0; i < out.length; ++i) {
 }
 ```
 
-### IIR low-pass filter
+### IIR filters
 
-The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains an `IIRLowPass` class that implements a 1-pole low-pass IIR filter. This class has two constructors: one that takes a time constant (`IIRLowPass.forTimeConstant()`), and another that takes a -3dB corner frequency (`IIRLowPass.forFrequency()`.)
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains several classes that implement IIR filters:
+
+* `IIRLowPass` implements a 1-pole low-pass filter with a given corner frequency. As usual, the corner frequency has a -3dB response, and -20dB per decade afterwards.
+* `IIRLowPassChain` implements a chain of identical 1-pole low-pass filters that collectively have the given corner frequency. The corner frequency has a -3dB response, and afterwards, -20dB multiplied by the number of filters in the chain.
+* `Deemphasis` implements a 1-pole de-emphasis filter for FM demodulation with a given time constant (given in seconds.)
+* `Preemphasis` implements a 1-pole pre-emphasis filter for FM modulation with a given time constant (given in seconds.)
+
+All these filters have an `inPlace()` method as well as an `add()` method that filters single samples, a `value` getter that returns the filters' current output, and a `phaseShift()` method that returns the filter's phase shift for a given frequency.
 
 ```typescript
-import { IIRLowPass } from "@jtarrio/demodulator/dsp/filters.js";
+import { Deemphasis } from "@jtarrio/demodulator/dsp/filters.js";
 
 const sampleRate = 1024000;
 const tc = 50e-6; // 50 microseconds
-let deemph = IIRLowPass.forTimeConstant(sampleRate, tc);
+let deemph = new Deemphasis(sampleRate, tc);
 
 // Filter in place
 let samples: Float32Array = getSomeSamples();
 deemph.inplace(samples);
-```
 
-There is also an `IIRLowPassChain` class that implements a chain of 1, 2, or more `IIRLowPass` filters, all with the same arguments. This lets you build filters with steeper frequency rolloffs (-20 dB/decade for each filter in the chain.) The `forTimeConstant` and `forFrequency` functions have been adjusted so that the whole chain of filters will display -3 dB response at the specified corner frequency, just like for `IIRLowPass`.
+// Filter one sample at a time
+samples = getSomeSamples();
+output = new Float32Array(samples.length);
+for (let i = 0; i < samples.length; ++i) {
+  output[i] = deemph.add(samples[i]);
+}
+```
 
 ### DC blocker
 

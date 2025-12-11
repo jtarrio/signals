@@ -19,8 +19,11 @@ import {
   product,
   sum,
   tone,
+  wbfmSignal,
 } from "../../src/sources/generators.js";
-import { IQ, iqRmsd } from "../testutil.js";
+import { fftSpectrum, IQ, iqRmsd, rmsd } from "../testutil.js";
+import { Preemphasis } from "../../src/dsp/filters.js";
+import { FFT } from "../../src/dsp/fft.js";
 
 describe("tone", () => {
   const len = 4800;
@@ -183,4 +186,52 @@ test("modulateFM", () => {
   let expQ = new Float32Array(angle.map((a) => Math.sin(a)));
 
   assert.isAtMost(iqRmsd([outI, outQ], [expI, expQ]), 1e-7);
+});
+
+describe("wbfmSignal", () => {
+  const len = 19200;
+  const sampleRate = 192000;
+  const tcMicros = 50;
+
+  let outI = new Float32Array(len);
+  let outQ = new Float32Array(len);
+
+  test("mono", () => {
+    let gen = wbfmSignal(tone(1234, 1), tcMicros);
+    gen(0, sampleRate, 0, outI, outQ);
+
+    let expected = new Float32Array(len).map(
+      (_, i) => 0.45 * Math.cos((2 * Math.PI * 1234 * i) / sampleRate)
+    );
+    new Preemphasis(sampleRate, tcMicros / 1e6).inPlace(expected);
+    assert.isAtMost(rmsd(outI, expected), 1e-6);
+  });
+
+  test("stereo", () => {
+    let gen = wbfmSignal(tone(1234, 1), tone(5678, 1), tcMicros);
+    gen(0, sampleRate, 0, outI, outQ);
+
+    let left = new Float32Array(len).map((_, i) =>
+      Math.cos((2 * Math.PI * 1234 * i) / sampleRate)
+    );
+    new Preemphasis(sampleRate, tcMicros / 1e6).inPlace(left);
+    let right = new Float32Array(len).map((_, i) =>
+      Math.cos((2 * Math.PI * 5678 * i) / sampleRate)
+    );
+    new Preemphasis(sampleRate, tcMicros / 1e6).inPlace(right);
+    let apb = new Float32Array(len).map((_, i) => 0.45 * (left[i] + right[i]));
+    let amb = new Float32Array(len).map(
+      (_, i) =>
+        0.45 *
+        (left[i] - right[i]) *
+        Math.sin((2 * Math.PI * 38000 * i) / sampleRate)
+    );
+    let pilot = new Float32Array(len).map(
+      (_, i) => 0.1 * Math.sin((2 * Math.PI * 19000 * i) / sampleRate)
+    );
+    let expected = new Float32Array(len).map(
+      (_, i) => apb[i] + pilot[i] + amb[i]
+    );
+    assert.isAtMost(rmsd(outI, expected), 1e-6);
+  });
 });

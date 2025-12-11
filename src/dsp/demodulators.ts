@@ -152,7 +152,8 @@ export class StereoSeparator {
     let out = this.buffer.get(samples.length);
     for (let i = 0; i < samples.length; ++i) {
       this.pll.add(samples[i]);
-      out[i] = samples[i] * this.pll.sin * this.pll.cos * 2;
+      // Multiply by 4 instead of 2 so 'out' has the same level as the input samples.
+      out[i] = samples[i] * this.pll.sin * this.pll.cos * 4;
     }
 
     return {

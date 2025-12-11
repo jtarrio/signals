@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { test, assert, describe } from "vitest";
-import { IQ, modulus } from "../testutil.js";
+import { IQ, modulus, prng } from "../testutil.js";
 import { ConfigSSB, DemodSSB, ModeSSB } from "../../src/demod/demod-ssb.js";
 import {
   getMode,
@@ -83,7 +83,7 @@ describe("DemodSSB", () => {
       noiseAmpl?: number
     ) => {
       let modulated = tone(carrierFreq + freq, ampl);
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl));
+      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
       let I = new Float32Array(inLen);
       let Q = new Float32Array(inLen);
       modulated(0, inSampleRate, 0, I, Q);

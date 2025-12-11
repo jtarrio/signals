@@ -19,13 +19,16 @@
  * @param sampleRate The signal's sample rate.
  * @param cornerFreq The -6dB frequency in Hz.
  * @param length The filter kernel's length. Should be an odd number.
+ * @param gain An optional output gain for the kernel. 1 by default.
  * @returns The FIR coefficients for the filter.
  */
 export function makeLowPassKernel(
   sampleRate: number,
   cornerFreq: number,
-  length: number
+  length: number,
+  gain?: number
 ): Float32Array {
+  if (gain === undefined) gain = 1;
   length += (length + 1) % 2;
   const freq = cornerFreq / sampleRate;
   let coefs = new Float32Array(length);
@@ -42,6 +45,7 @@ export function makeLowPassKernel(
     sum += val;
     coefs[i] = val;
   }
+  sum /= gain;
   for (let i = 0; i < length; ++i) {
     coefs[i] /= sum;
   }

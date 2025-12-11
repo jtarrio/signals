@@ -115,16 +115,15 @@ export function iqRealSineTone(
   ];
 }
 
-// Returns white noise of the given amplitude.
-// Uses a PRNG with a fixed seed so the noise is always the same.
-export function noise(length: number, amplitude: number): Float32Array {
-  let rnd = new PRNG(0x1234_5678_abcd_ef01n);
-  return new Float32Array(length).map((_) => amplitude * rnd.next());
-  // return new Float32Array(length).map(_ => amplitude * Math.random());
+/** Returns a function that returns pseudorandom numbers, with the given seed. */
+export function prng(seed?: bigint): () => number {
+  if (seed === undefined) seed = 0x1234_5678_abcd_ef01n;
+  let prng = new PRNG(seed);
+  return () => prng.next();
 }
 
 // PRNG from Widynski, Bernard (2020). "Squares: A Fast Counter-Based RNG". https://doi.org/10.48550/arXiv.2004.06278
-export class PRNG {
+class PRNG {
   constructor(seed: bigint) {
     this.counter = BigInt(1);
     this.key = seed;
@@ -147,6 +146,13 @@ export class PRNG {
     this.counter++;
     return n / 2 ** 32;
   }
+}
+
+// Returns white noise of the given amplitude.
+// Uses a PRNG with a fixed seed so the noise is always the same.
+export function noise(length: number, amplitude: number): Float32Array {
+  let random = prng();
+  return new Float32Array(length).map((_) => amplitude * random());
 }
 
 // Adds some DC to a signal
@@ -222,18 +228,22 @@ export function fftSpectrum(fft: IQ, width: number, lines: number): string {
   let maxm = Math.max(...m);
   let maxPower = maxm * maxm;
   let powPerLine = maxPower / lines;
-  let binsPerChar = (m.length / 2) / width;
-  let out = Array.from({length: lines}).map(_ => '');
-    for (let c = 0; c < width; ++c) {
-      let h = 0;
-      for (let b = Math.floor(binsPerChar * c); b < Math.floor(binsPerChar * (c + 1)); ++b) {
-        h = Math.max(h, m[b]);
-      }
-      h = Math.round((h * h) / powPerLine);
-      for (let lr = 0; lr < lines; ++lr) {
-        let l = lines - lr - 1;
-        out[l] += h >= lr ? 'X' : ' ';
-      }
+  let binsPerChar = m.length / 2 / width;
+  let out = Array.from({ length: lines }).map((_) => "");
+  for (let c = 0; c < width; ++c) {
+    let h = 0;
+    for (
+      let b = Math.floor(binsPerChar * c);
+      b < Math.floor(binsPerChar * (c + 1));
+      ++b
+    ) {
+      h = Math.max(h, m[b]);
+    }
+    h = Math.round((h * h) / powPerLine);
+    for (let lr = 0; lr < lines; ++lr) {
+      let l = lines - lr - 1;
+      out[l] += h >= lr ? "X" : " ";
+    }
   }
-  return out.join('\n');
+  return out.join("\n");
 }

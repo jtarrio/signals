@@ -13,10 +13,16 @@
 // limitations under the License.
 
 import { IqBuffer } from "../dsp/buffers.js";
+import { Preemphasis } from "../dsp/filters.js";
 import { SampleGenerator } from "./realtime.js";
 
 /** Returns a generator for a tone at the given frequency with the given amplitude. */
-export function tone(freq: number, amplitude: number): SampleGenerator {
+export function tone(
+  freq: number,
+  amplitude: number,
+  phase?: number
+): SampleGenerator {
+  if (phase === undefined) phase = 0;
   return (
     sample: number,
     rate: number,
@@ -30,7 +36,7 @@ export function tone(freq: number, amplitude: number): SampleGenerator {
       Q.fill(0);
       return;
     }
-    const p = 2 * Math.PI * delta * (sample % rate);
+    const p = 2 * Math.PI * delta * (sample % rate) + phase;
     let a = Math.cos(p);
     let b = Math.sin(p);
     const f = 2 * Math.PI * delta;
@@ -47,8 +53,12 @@ export function tone(freq: number, amplitude: number): SampleGenerator {
   };
 }
 
-/** Returns a generator for noise with a given amplitude. */
-export function noise(amplitude: number): SampleGenerator {
+/** Returns a generator for noise with a given maximum amplitude. */
+export function noise(
+  amplitude: number,
+  random?: () => number
+): SampleGenerator {
+  if (random === undefined) random = Math.random;
   return (
     _sample: number,
     _rate: number,
@@ -57,8 +67,8 @@ export function noise(amplitude: number): SampleGenerator {
     Q: Float32Array
   ) => {
     for (let i = 0; i < I.length; ++i) {
-      let r = amplitude * Math.sqrt(Math.random());
-      let t = Math.random() * 2 * Math.PI;
+      let r = amplitude * Math.sqrt(random());
+      let t = random() * 2 * Math.PI;
       I[i] = r * Math.cos(t);
       Q[i] = r * Math.sin(t);
     }
@@ -116,6 +126,42 @@ export function product(
       I[i] = a * c - b * d;
       Q[i] = a * d + b * c;
     }
+  };
+}
+
+/**
+ * Returns a generator that multiplies every sample by the given gain.
+ */
+export function amplify(
+  gain: number,
+  signal: SampleGenerator
+): SampleGenerator {
+  return (
+    sample: number,
+    rate: number,
+    centerFreq: number,
+    I: Float32Array,
+    Q: Float32Array
+  ) => {
+    signal(sample, rate, centerFreq, I, Q);
+    for (let i = 0; i < I.length; ++i) {
+      I[i] *= gain;
+      Q[i] *= gain;
+    }
+  };
+}
+
+/** Returns the real part of another generator's output. */
+export function real(signal: SampleGenerator): SampleGenerator {
+  return (
+    sample: number,
+    rate: number,
+    centerFreq: number,
+    I: Float32Array,
+    Q: Float32Array
+  ) => {
+    signal(sample, rate, centerFreq, I, Q);
+    Q.fill(0);
   };
 }
 
@@ -199,4 +245,109 @@ export function modulateFM(
     phase += delta * I.length + maxF * sigSum;
     phase -= Math.floor(phase);
   };
+}
+
+/**
+ * Returns a generator that applies pre-emphasis to the output of another signal generator.
+ * This pre-emphasis is just the opposite to the de-emphasis produced by an IIR single-pole
+ * low-pass filter with the given time constant.
+ */
+function preemphasis(
+  tcMicros: number,
+  signal: SampleGenerator
+): SampleGenerator {
+  let prevRate: number | undefined;
+  let filterI: Preemphasis | undefined;
+  let filterQ: Preemphasis | undefined;
+  return (
+    sample: number,
+    rate: number,
+    centerFreq: number,
+    I: Float32Array,
+    Q: Float32Array
+  ) => {
+    if (prevRate !== rate) {
+      prevRate = rate;
+      filterI = new Preemphasis(rate, tcMicros / 1e6);
+      filterQ = filterI.clone() as Preemphasis;
+    }
+    signal(sample, rate, centerFreq, I, Q);
+    filterI!.inPlace(I);
+    filterQ!.inPlace(Q);
+  };
+}
+
+/**
+ * Returns a generator that avoids recomputing the signal
+ * if called twice with the same parameters.
+ */
+function cache(signal: SampleGenerator): SampleGenerator {
+  let lastSample: number | undefined;
+  let lastRate: number | undefined;
+  let lastCenterFreq: number | undefined;
+  let buf = new IqBuffer(1, 1024);
+  let cache: [Float32Array, Float32Array] = [
+    new Float32Array(0),
+    new Float32Array(0),
+  ];
+  return (
+    sample: number,
+    rate: number,
+    centerFreq: number,
+    I: Float32Array,
+    Q: Float32Array
+  ) => {
+    if (
+      lastSample !== sample ||
+      lastRate !== rate ||
+      lastCenterFreq !== centerFreq ||
+      cache[0].length !== I.length
+    ) {
+      cache = buf.get(I.length);
+      signal(sample, rate, centerFreq, cache[0], cache[1]);
+      lastSample = sample;
+      lastRate = rate;
+      lastCenterFreq = centerFreq;
+    }
+    I.set(cache[0]);
+    Q.set(cache[1]);
+  };
+}
+
+/**
+ * Returns a generator that produces a baseband signal for WBFM modulation
+ * for mono or left and right channels, with the given time constant in microseconds
+ * (50 by default.)
+ */
+export function wbfmSignal(
+  mono: SampleGenerator,
+  tcMicros?: number
+): SampleGenerator;
+export function wbfmSignal(
+  left: SampleGenerator,
+  right: SampleGenerator,
+  tcMicros?: number
+): SampleGenerator;
+export function wbfmSignal(
+  left: SampleGenerator,
+  rightOrTcMicros?: SampleGenerator | number,
+  tcMicros?: number
+): SampleGenerator {
+  let right: SampleGenerator | undefined;
+  if (typeof rightOrTcMicros === "number") {
+    tcMicros = rightOrTcMicros;
+  } else {
+    right = rightOrTcMicros;
+  }
+  if (tcMicros === undefined) tcMicros = 50;
+  if (right === undefined)
+    return amplify(0.45, preemphasis(tcMicros, real(left)));
+
+  const pilot = real(tone(19000, 0.1, -Math.PI / 2));
+  const shift = real(tone(38000, 1, -Math.PI / 2));
+  const l = cache(preemphasis(tcMicros, real(left)));
+  const r = cache(preemphasis(tcMicros, real(right)));
+  const apb = amplify(0.45, sum(l, r));
+  const amb = amplify(0.45, sum(l, amplify(-1, r)));
+  return sum(apb, pilot, product(amb, shift));
 }

@@ -29,11 +29,13 @@ import {
 import {
   AGC,
   DcBlocker,
+  Deemphasis,
   FIRFilter,
   FrequencyShifter,
   IIRLowPass,
   IIRLowPassChain,
   PLL,
+  Preemphasis,
 } from "../../src/dsp/filters.js";
 
 test("FIRFilter as delay line", () => {
@@ -166,30 +168,33 @@ test("DcBlocker", () => {
 
 test("IIRLowPass", () => {
   const sampleRate = 192000;
-  for (const timeConstant of [50, 75]) {
+  for (const cornerFrequency of [1000, 15000]) {
     const filterPower = (freq: number) => {
-      let filter = IIRLowPass.forTimeConstant(sampleRate, timeConstant * 1e-6);
+      let filter = new IIRLowPass(sampleRate, cornerFrequency);
       let tone = sineTone(sampleRate, sampleRate, freq, 1);
       filter.inPlace(tone);
       return power(tone.subarray(sampleRate * 0.75));
     };
 
     const expectedPower = (freq: number) => {
-      let xr = Math.sqrt(timeConstant * 1e-6);
+      const timeConstant = 1 / (2 * Math.PI * cornerFrequency);
+      let xr = Math.sqrt(timeConstant);
       let xc = 1 / (2 * Math.PI * freq * xr);
       let o = xc / Math.hypot(xr, xc);
       return (o * o) / 2;
     };
 
-    let cf = 1 / (2 * Math.PI * timeConstant * 1e-6);
-    assert.approximately(filterPower(cf), 0.25, 0.005);
+    let f = new IIRLowPass(sampleRate, cornerFrequency);
+    assert.approximately(f.phaseShift(cornerFrequency), Math.PI / 4, 1e-7);
+
+    assert.approximately(filterPower(cornerFrequency), 0.25, 0.005);
 
     for (let i = 300; i < 19000; i += 1000) {
       assert.approximately(
         filterPower(i),
         expectedPower(i),
         0.005,
-        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
+        `Mismatch in frequency response for ${i} Hz with corner frequency ${cornerFrequency} Hz`
       );
     }
   }
@@ -201,7 +206,7 @@ test("IIRLowPassChain", () => {
 
   for (let count = 1; count < 5; ++count) {
     const filterPower = (freq: number) => {
-      let filter = IIRLowPassChain.forFrequency(count, sampleRate, cornerFreq);
+      let filter = new IIRLowPassChain(count, sampleRate, cornerFreq);
       let tone = sineTone(sampleRate, sampleRate, freq, 1);
       filter.inPlace(tone);
       return power(tone.subarray(sampleRate * 0.75));
@@ -224,6 +229,60 @@ test("IIRLowPassChain", () => {
         expectedPower(i),
         0.005,
         `Mismatch in frequency response for ${i} Hz with count ${count}`
+      );
+    }
+  }
+});
+
+test("Deemphasis", () => {
+  const sampleRate = 192000;
+  for (const timeConstant of [50, 75]) {
+    const filterPower = (freq: number) => {
+      let filter = new Deemphasis(sampleRate, timeConstant * 1e-6);
+      let tone = sineTone(sampleRate, sampleRate, freq, 1);
+      filter.inPlace(tone);
+      return power(tone.subarray(sampleRate * 0.75));
+    };
+
+    const expectedPower = (freq: number) => {
+      let xr = Math.sqrt(timeConstant * 1e-6);
+      let xc = 1 / (2 * Math.PI * freq * xr);
+      let o = xc / Math.hypot(xr, xc);
+      return (o * o) / 2;
+    };
+
+    let cf = 1 / (2 * Math.PI * timeConstant * 1e-6);
+    assert.approximately(filterPower(cf), 0.25, 0.005);
+
+    for (let i = 300; i < 19000; i += 1000) {
+      assert.approximately(
+        filterPower(i),
+        expectedPower(i),
+        0.001,
+        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
+      );
+    }
+  }
+});
+
+test("Preemphasis", () => {
+  const sampleRate = 192000;
+  for (const timeConstant of [50, 75]) {
+    const filterPower = (freq: number) => {
+      let filter = new Preemphasis(sampleRate, timeConstant * 1e-6);
+      let deemph = new Deemphasis(sampleRate, timeConstant * 1e-6);
+      let tone = sineTone(sampleRate, sampleRate, freq, 1);
+      filter.inPlace(tone);
+      deemph.inPlace(tone);
+      return power(tone.subarray(sampleRate * 0.75));
+    };
+
+    for (let i = 300; i < 19000; i += 1000) {
+      assert.approximately(
+        filterPower(i),
+        0.5,
+        0.002,
+        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
       );
     }
   }

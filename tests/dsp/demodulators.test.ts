@@ -15,6 +15,7 @@
 import { test, assert } from "vitest";
 import {
   add,
+  argument,
   iqAdd,
   iqRealSineTone,
   iqSineTone,
@@ -117,9 +118,9 @@ test("AMDemodulator", () => {
 });
 
 test("FMDemodulator", () => {
-  const sampleRate = 48000;
+  const sampleRate = 336000;
   const len = sampleRate / 10;
-  const maxDev = 5000;
+  const maxDev = 75000;
   let demod = new FMDemodulator(maxDev / sampleRate);
 
   for (let f = -maxDev; f <= maxDev; f += maxDev / 20) {
@@ -138,9 +139,10 @@ test("FMDemodulator", () => {
 
   let signal = Array.from({ length: len }).map(
     (_, i) =>
-      (Math.cos((2 * Math.PI * 2500 * i) / sampleRate) +
-        Math.sin((2 * Math.PI * 57 * i) / sampleRate)) /
-      2
+      (Math.cos((2 * Math.PI * 2543 * i) / sampleRate) +
+        Math.cos((2 * Math.PI * 19000 * i) / sampleRate + 0.1234) +
+        Math.sin((2 * Math.PI * 42345 * i) / sampleRate)) /
+      3
   );
   let angle = new Array(len);
   angle[0] = 0;
@@ -151,16 +153,13 @@ test("FMDemodulator", () => {
   let I = new Float32Array(angle.map((a) => Math.cos(a)));
   let Q = new Float32Array(angle.map((a) => Math.sin(a)));
 
-  let expected = new Float32Array(len).map((_, i) =>
-    i == 0
-      ? 1
-      : (Math.cos((2 * Math.PI * 2500 * (i - 1)) / sampleRate) +
-          Math.sin((2 * Math.PI * 57 * (i - 1)) / sampleRate)) /
-        2
-  );
+  let expected = new Float32Array(len);
+  expected[0] = 1;
+  expected.subarray(1).set(new Float32Array(signal.slice(0, len - 1)));
+
   let out = new Float32Array(len);
   demod.demodulate(I, Q, out);
-  assert.isAtMost(rmsd(out, expected), 0.03);
+  assert.isAtMost(rmsd(out, expected), 1e-7);
 });
 
 test("StereoSeparator - with stereo signal", () => {
@@ -184,5 +183,6 @@ test("StereoSeparator - with stereo signal", () => {
     new Float32Array(fft.length)
   );
   const bin = (2625 * fft.length) / sampleRate;
-  assert.approximately(modulus(transformed, bin), 0.1125, 0.0005);
+  assert.approximately(modulus(transformed, bin), 0.225, 0.0005);
+  assert.approximately(argument(transformed, bin), 0, 2e-4);
 });

@@ -230,34 +230,38 @@ export function frequencyToTimeConstant(freq: number) {
   return 1 / (2 * Math.PI * freq);
 }
 
-/** A low-pass single-pole IIR filter. */
-export class IIRLowPass implements Filter {
-  static forFrequency(sampleRate: number, freq: number): IIRLowPass {
-    return new IIRLowPass(sampleRate, frequencyToTimeConstant(freq));
-  }
+export interface IIRFilter extends Filter {
+  /** Returns a newly initialized clone of this filter. */
+  clone(): IIRFilter;
 
-  static forTimeConstant(sampleRate: number, timeConstant: number): IIRLowPass {
-    return new IIRLowPass(sampleRate, timeConstant);
-  }
+  /** Filters an individual sample. */
+  add(sample: number): number;
 
-  /**
-   * @param sampleRate The signal's sample rate.
-   * @param timeConstant The filter's time constant in seconds.
-   */
-  private constructor(
+  /** Returns the value currently held by the filter. */
+  get value(): number;
+
+  /** Returns the phase shift at the given frequency. */
+  phaseShift(freq: number): number;
+}
+
+/** IIR filter with two 'b' coefficients and one 'a' coefficient. */
+class IIRFilter21 implements IIRFilter {
+  constructor(
     private sampleRate: number,
-    private timeConstant: number
+    private b0: number,
+    private b1: number,
+    private a1: number
   ) {
-    this.alpha = decay(sampleRate, timeConstant);
+    this.prev = 0;
     this.val = 0;
   }
 
-  private alpha: number;
+  private prev: number;
   private val: number;
 
   /** Returns a copy of this filter. */
-  clone(): IIRLowPass {
-    return new IIRLowPass(this.sampleRate, this.timeConstant);
+  clone(): IIRFilter {
+    return new IIRFilter21(this.sampleRate, this.b0, this.b1, this.a1);
   }
 
   getDelay(): number {
@@ -269,18 +273,21 @@ export class IIRLowPass implements Filter {
    * @param samples The samples to filter.
    */
   inPlace(samples: Float32Array) {
-    const alpha = this.alpha;
+    let prev = this.prev;
     let val = this.val;
     for (let i = 0; i < samples.length; ++i) {
-      val += alpha * (samples[i] - val);
+      val = this.b0 * samples[i] + this.b1 * prev + this.a1 * val;
+      prev = samples[i];
       samples[i] = val;
     }
+    this.prev = prev;
     this.val = val;
   }
 
   /** Filters an individual sample. */
   add(sample: number): number {
-    this.val += this.alpha * (sample - this.val);
+    this.val = this.b0 * sample + this.b1 * this.prev + this.a1 * this.val;
+    this.prev = sample;
     return this.val;
   }
 
@@ -289,51 +296,70 @@ export class IIRLowPass implements Filter {
     return this.val;
   }
 
-  /** Returns the phase shift at the given frequency. */
-  public phaseShift(freq: number): number {
-    return -Math.atan(2 * Math.PI * freq * this.timeConstant);
+  /** Returns the phase shift at the given angular frequency. */
+  phaseShift(freq: number): number {
+    const w = (2 * Math.PI * freq) / this.sampleRate;
+    const real =
+      Math.cos(w) * (this.b1 - this.b0 * this.a1) + this.b0 - this.b1 * this.a1;
+    const imag = Math.sin(w) * (this.b1 + this.b0 * this.a1);
+    return atan2(imag, real);
   }
 }
 
-/** A sequence of chained IIR low-pass filters, for sharper filters. */
-export class IIRLowPassChain implements Filter {
-  static forFrequency(
-    count: number,
-    sampleRate: number,
-    freq: number
-  ): IIRLowPassChain {
-    return IIRLowPassChain.forTimeConstant(
-      count,
-      sampleRate,
-      frequencyToTimeConstant(freq)
-    );
-  }
+/** A FM de-emphasis filter. */
+export class Deemphasis extends IIRFilter21 {
+  /**
+   * @param sampleRate The signal's sample rate.
+   * @param timeConstant The filter's time constant, in seconds.
+   */
+  constructor(sampleRate: number, timeConstant: number) {
+    const wd = 1 / (timeConstant * sampleRate);
+    const wa = 2 * sampleRate * Math.tan(wd / 2);
+    const tau = 1 / wa;
+    let a = 1 + 2 * tau * sampleRate;
+    let b = 1 - 2 * tau * sampleRate;
 
-  static forTimeConstant(
-    count: number,
-    sampleRate: number,
-    timeConstant: number
-  ): IIRLowPassChain {
-    return new IIRLowPassChain(
-      count,
-      sampleRate,
-      timeConstant * Math.sqrt(Math.pow(2, 1 / count) - 1)
-    );
+    super(sampleRate, 1 / a, 1 / a, -b / a);
   }
+}
 
-  private constructor(count: number, sampleRate: number, timeConstant: number) {
-    this.filters = Array.from({ length: count }).map((_) =>
-      IIRLowPass.forTimeConstant(sampleRate, timeConstant)
-    );
+/** A FM pre-emphasis filter. */
+export class Preemphasis extends IIRFilter21 {
+  /**
+   * @param sampleRate The signal's sample rate.
+   * @param timeConstant The filter's time constant, in seconds.
+   */
+  constructor(sampleRate: number, timeConstant: number) {
+    const wdl = 1 / (timeConstant * sampleRate);
+    const wdh = Math.PI * 0.9;
+    const wal = Math.tan(wdl / 2);
+    const wah = Math.tan(wdh / 2);
+    const a = wal + 1;
+    const b = wal - 1;
+    const c = wah + 1;
+    const d = wah - 1;
+    const zg = wal / wah;
+    super(sampleRate, a / (c * zg), b / (c * zg), -d / c);
   }
+}
 
-  private filters: IIRLowPass[];
+/** A single-pole IIR low-pass filter. */
+export class IIRLowPass extends Deemphasis {
+  /**
+   * @param sampleRate The signal's sample rate.
+   * @param freq The filter's corner frequency.
+   */
+  constructor(sampleRate: number, freq: number) {
+    super(sampleRate, frequencyToTimeConstant(freq));
+  }
+}
+
+class IIRFilterChain implements IIRFilter {
+  constructor(private filters: IIRFilter[]) {}
 
   /** Returns a copy of this filter. */
-  clone(): IIRLowPassChain {
-    let copy = new IIRLowPassChain(0, 1, 1);
-    copy.filters = this.filters.map((f) => f.clone());
-    return copy;
+  clone(): IIRFilter {
+    return new IIRFilterChain(this.filters.map((f) => f.clone()));
   }
 
   getDelay(): number {
@@ -370,6 +396,22 @@ export class IIRLowPassChain implements Filter {
       lag += f.phaseShift(freq);
     }
     return ((lag + Math.PI) % (2 * Math.PI)) - Math.PI;
+  }
+}
+
+/** A chain of single-pole IIR low-pass filters. */
+export class IIRLowPassChain extends IIRFilterChain {
+  /**
+   * @param count Number of filters in the chain.
+   * @param sampleRate The signal's sample rate.
+   * @param freq The corner frequency for the whole chain.
+   */
+  constructor(count: number, sampleRate: number, freq: number) {
+    const cf = freq / Math.sqrt(Math.pow(2, 1 / count) - 1);
+    let filters = Array.from({ length: count }).map(
+      (_) => new IIRLowPass(sampleRate, cf)
+    );
+    super(filters);
   }
 }
 
@@ -416,17 +458,17 @@ export class PLL {
     this.maxSpeedCorr = (2 * Math.PI * tolerance) / sampleRate;
     this.speedCorrection = 0;
     this.phaseCorrection = 0;
-    this.biFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance);
-    this.bqFlt = IIRLowPassChain.forFrequency(4, sampleRate, tolerance);
-    this.siFlt = IIRLowPassChain.forFrequency(4, sampleRate, 7);
-    this.sqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 7);
-    this.piFlt = IIRLowPassChain.forFrequency(4, sampleRate, 250);
-    this.pqFlt = IIRLowPassChain.forFrequency(4, sampleRate, 250);
+    this.biFlt = new IIRLowPassChain(4, sampleRate, tolerance);
+    this.bqFlt = new IIRLowPassChain(4, sampleRate, tolerance);
+    this.siFlt = new IIRLowPassChain(4, sampleRate, 7);
+    this.sqFlt = new IIRLowPassChain(4, sampleRate, 7);
+    this.piFlt = new IIRLowPassChain(4, sampleRate, 250);
+    this.pqFlt = new IIRLowPassChain(4, sampleRate, 250);
     this.lbI = 0;
     this.lbQ = 0;
-    this.sgnLockFlt = IIRLowPass.forFrequency(sampleRate, 10);
+    this.sgnLockFlt = new IIRLowPass(sampleRate, 10);
     this.sgnLockThreshold = ((90 / 360) * 2 * Math.PI) / sampleRate;
-    this.absLockFlt = IIRLowPass.forFrequency(sampleRate, 10);
+    this.absLockFlt = new IIRLowPass(sampleRate, 10);
     this.absLockThreshold = (15 * 2 * Math.PI) / sampleRate;
     this.lockCounter = 0;
     this.cos = 1;
@@ -439,17 +481,17 @@ export class PLL {
   private maxSpeedCorr: number;
   private speedCorrection: number;
   private phaseCorrection: number;
-  private biFlt: IIRLowPassChain;
-  private bqFlt: IIRLowPassChain;
-  private siFlt: IIRLowPassChain;
-  private sqFlt: IIRLowPassChain;
-  private piFlt: IIRLowPassChain;
-  private pqFlt: IIRLowPassChain;
+  private biFlt: IIRFilter;
+  private bqFlt: IIRFilter;
+  private siFlt: IIRFilter;
+  private sqFlt: IIRFilter;
+  private piFlt: IIRFilter;
+  private pqFlt: IIRFilter;
   private lbI: number;
   private lbQ: number;
-  private sgnLockFlt: IIRLowPass;
+  private sgnLockFlt: IIRFilter;
   private sgnLockThreshold: number;
-  private absLockFlt: IIRLowPass;
+  private absLockFlt: IIRFilter;
   private absLockThreshold: number;
   private lockCounter: number;
   public cos: number;
@@ -514,7 +556,7 @@ export class PLL {
     // But the biFlt/bqFlt are going to shift the phase of (bI, bQ), so compensate for that.
     const freqCorrectionHz = (speedCorr * this.sampleRate) / (2 * Math.PI);
     const shift = this.biFlt.phaseShift(freqCorrectionHz);
-    const phaseDiff = atan2(dQ, dI) - shift;
+    const phaseDiff = atan2(dQ, dI) + shift;
 
     // Check if we are locked (the phase correction is more or less stable)
     const deriv = this.phaseCorrection - phaseDiff;

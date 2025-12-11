@@ -21,6 +21,7 @@
  * found through https://mazzo.li/posts/vectorized-atan2.html
  */
 export function atan2(imag: number, real: number): number {
+  if (real == 0 && imag == 0) return 0;
   let swap = Math.abs(real) < Math.abs(imag);
   let div = swap ? real / imag : imag / real;
 

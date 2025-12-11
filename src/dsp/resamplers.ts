@@ -23,10 +23,7 @@ class Downsampler {
    * @param ratio The ratio of input/output sample rates.
    * @param kernel The coefficients for the low-pass filter.
    */
-  constructor(
-    private ratio: number,
-    kernel: Float32Array
-  ) {
+  constructor(private ratio: number, kernel: Float32Array) {
     this.filter = new FIRFilter(kernel);
     this.buffer = new Float32Buffer(2);
   }
@@ -58,8 +55,22 @@ export class RealDownsampler {
    * @param outRate The output sample rate.
    * @param filterLen The size of the low-pass filter.
    */
-  constructor(inRate: number, outRate: number, filterLen: number) {
-    const kernel = makeLowPassKernel(inRate, outRate / 2, filterLen);
+  constructor(inRate: number, outRate: number, filterLen: number);
+  /**
+   * @param inRate The input sample rate.
+   * @param outRate The output sample rate.
+   * @param kernel The kernel to apply to the signal before downsampling.
+   */
+  constructor(inRate: number, outRate: number, kernel: Float32Array);
+  constructor(
+    inRate: number,
+    outRate: number,
+    filterLenOrKernel: number | Float32Array
+  ) {
+    const kernel =
+      typeof filterLenOrKernel === "number"
+        ? makeLowPassKernel(inRate, outRate / 2, filterLenOrKernel)
+        : filterLenOrKernel;
     this.downsampler = new Downsampler(inRate / outRate, kernel);
   }
 
@@ -81,8 +92,22 @@ export class ComplexDownsampler {
    * @param outRate The output sample rate.
    * @param filterLen The size of the low-pass filter.
    */
-  constructor(inRate: number, outRate: number, filterLen: number) {
-    const kernel = makeLowPassKernel(inRate, outRate / 2, filterLen);
+  constructor(inRate: number, outRate: number, filterLen: number);
+  /**
+   * @param inRate The input sample rate.
+   * @param outRate The output sample rate.
+   * @param kernel The filter kernel to apply to the signal before downsampling.
+   */
+  constructor(inRate: number, outRate: number, kernel: Float32Array);
+  constructor(
+    inRate: number,
+    outRate: number,
+    filterLenOrKernel: number | Float32Array
+  ) {
+    const kernel =
+      typeof filterLenOrKernel === "number"
+        ? makeLowPassKernel(inRate, outRate / 2, filterLenOrKernel)
+        : filterLenOrKernel;
     this.downsamplerI = new Downsampler(inRate / outRate, kernel);
     this.downsamplerQ = new Downsampler(inRate / outRate, kernel);
   }
