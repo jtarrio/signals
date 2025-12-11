@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IqBuffer } from "../dsp/buffers.js";
+import { IqPool } from "../dsp/buffers.js";
 import { Preemphasis } from "../dsp/filters.js";
 import { SampleGenerator } from "./realtime.js";
 
@@ -77,7 +77,7 @@ export function noise(
 
 /** Returns a generator that adds the outputs of all the provided generators together. */
 export function sum(...generators: SampleGenerator[]): SampleGenerator {
-  let buffer = new IqBuffer(1, 65536);
+  let pool = new IqPool(1, 65536);
   return (
     sample: number,
     rate: number,
@@ -87,7 +87,7 @@ export function sum(...generators: SampleGenerator[]): SampleGenerator {
   ) => {
     I.fill(0);
     Q.fill(0);
-    let [J, R] = buffer.get(I.length);
+    let [J, R] = pool.get(I.length);
     for (let g of generators) {
       g(sample, rate, centerFreq, J, R);
       for (let i = 0; i < I.length; ++i) {
@@ -107,7 +107,7 @@ export function product(
   carrier: SampleGenerator,
   signal: SampleGenerator
 ): SampleGenerator {
-  let buffer = new IqBuffer(1, 65536);
+  let pool = new IqPool(1, 65536);
   return (
     sample: number,
     rate: number,
@@ -115,7 +115,7 @@ export function product(
     I: Float32Array,
     Q: Float32Array
   ) => {
-    let [J, R] = buffer.get(I.length);
+    let [J, R] = pool.get(I.length);
     carrier(sample, rate, centerFreq, I, Q);
     signal(sample, rate, 0, J, R);
     for (let i = 0; i < I.length; ++i) {
@@ -176,7 +176,7 @@ export function modulateAM(
   amplitude: number,
   signal: SampleGenerator
 ): SampleGenerator {
-  let buffer = new IqBuffer(1, 65536);
+  let pool = new IqPool(1, 65536);
   const carrier = tone(carrierFreq, amplitude);
   return (
     sample: number,
@@ -191,7 +191,7 @@ export function modulateAM(
       Q.fill(0);
       return;
     }
-    let [J, R] = buffer.get(I.length);
+    let [J, R] = pool.get(I.length);
     carrier(sample, rate, centerFreq, I, Q);
     signal(sample, rate, 0, J, R);
     for (let i = 0; i < I.length; ++i) {
@@ -214,7 +214,7 @@ export function modulateFM(
   amplitude: number,
   signal: SampleGenerator
 ): SampleGenerator {
-  let buffer = new IqBuffer(1, 65536);
+  let pool = new IqPool(1, 65536);
   let phase = 0;
   return (
     sample: number,
@@ -231,7 +231,7 @@ export function modulateFM(
     }
     const maxF = maximumDeviation / rate;
 
-    let [J, R] = buffer.get(I.length);
+    let [J, R] = pool.get(I.length);
     signal(sample, rate, 0, J, R);
     let sigSum = 0;
     let p = phase;
@@ -285,7 +285,7 @@ function cache(signal: SampleGenerator): SampleGenerator {
   let lastSample: number | undefined;
   let lastRate: number | undefined;
   let lastCenterFreq: number | undefined;
-  let buf = new IqBuffer(1, 1024);
+  let pool = new IqPool(1, 1024);
   let cache: [Float32Array, Float32Array] = [
     new Float32Array(0),
     new Float32Array(0),
@@ -303,7 +303,7 @@ function cache(signal: SampleGenerator): SampleGenerator {
       lastCenterFreq !== centerFreq ||
       cache[0].length !== I.length
     ) {
-      cache = buf.get(I.length);
+      cache = pool.get(I.length);
       signal(sample, rate, centerFreq, cache[0], cache[1]);
       lastSample = sample;
       lastRate = rate;

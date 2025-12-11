@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32Buffer } from "../dsp/buffers.js";
+import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator, StereoSeparator } from "../dsp/demodulators.js";
 import { Deemphasis, FIRFilter, FrequencyShifter } from "../dsp/filters.js";
@@ -181,7 +181,7 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
     this.stereoSeparator = new StereoSeparator(inRate, pilotF);
     this.leftDeemph = new Deemphasis(outRate, deemphTc);
     this.rightDeemph = new Deemphasis(outRate, deemphTc);
-    this.outBuffer = new Float32Buffer(2, 1024);
+    this.outPool = new Float32Pool(2, 1024);
   }
 
   private monoSampler: RealDownsampler;
@@ -189,7 +189,7 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
   private stereoSeparator: StereoSeparator;
   private leftDeemph: Deemphasis;
   private rightDeemph: Deemphasis;
-  private outBuffer: Float32Buffer;
+  private outPool: Float32Pool;
 
   getMode(): ModeWBFM {
     return this.mode;
@@ -211,7 +211,7 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
       const stereo = this.stereoSeparator.separate(samplesI);
       if (stereo.found) {
         const diffAudio = this.stereoSampler.downsample(stereo.diff);
-        let leftAudio = this.outBuffer.get(audio.length);
+        let leftAudio = this.outPool.get(audio.length);
         let rightAudio = audio;
         for (let i = 0; i < diffAudio.length; ++i) {
           leftAudio[i] = (audio[i] - diffAudio[i]) / 2;

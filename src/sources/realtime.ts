@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32RingBuffer, IqBuffer } from "../dsp/buffers.js";
+import { Float32RingBuffer, IqPool } from "../dsp/buffers.js";
 import { SampleBlock, SignalSource } from "../radio/signal_source.js";
 import { PendingReadRing } from "./read_ring.js";
 
@@ -46,8 +46,8 @@ export class RealTimeSource implements SignalSource {
     this.I = new Float32RingBuffer(Math.max(65536, this.sampleRate / 10));
     this.Q = new Float32RingBuffer(this.I.capacity);
     this.lastSampleInBuffer = 0;
-    this.inBuffer = new IqBuffer(1, 65536);
-    this.outBuffer = new IqBuffer(16, 65536);
+    this.inPool = new IqPool(1, 65536);
+    this.outPool = new IqPool(16, 65536);
     this.pendingReads = new PendingReadRing(8);
     this.running = false;
     this.firstTs = null;
@@ -58,8 +58,8 @@ export class RealTimeSource implements SignalSource {
   private I: Float32RingBuffer;
   private Q: Float32RingBuffer;
   private lastSampleInBuffer: number;
-  private inBuffer: IqBuffer;
-  private outBuffer: IqBuffer;
+  private inPool: IqPool;
+  private outPool: IqPool;
   private pendingReads: PendingReadRing;
   private running: boolean;
   private firstTs: number | null;
@@ -130,7 +130,7 @@ export class RealTimeSource implements SignalSource {
         this.fillBuffer(curSample);
         continue;
       }
-      let [I, Q] = this.outBuffer.get(readSize);
+      let [I, Q] = this.outPool.get(readSize);
       this.I.moveTo(I);
       this.Q.moveTo(Q);
       this.pendingReads.resolve({ I, Q, frequency: this.centerFrequency });
@@ -159,7 +159,7 @@ export class RealTimeSource implements SignalSource {
     }
     if (fillCount == 0) return;
 
-    let [I, Q] = this.inBuffer.get(fillCount);
+    let [I, Q] = this.inPool.get(fillCount);
     this.generator(fillStart, this.sampleRate, this.centerFrequency, I, Q);
     this.I.store(I);
     this.Q.store(Q);

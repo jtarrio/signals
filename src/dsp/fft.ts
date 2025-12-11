@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32RingBuffer, IqBuffer } from "./buffers.js";
+import { Float32RingBuffer, IqPool } from "./buffers.js";
 
 /** Fast Fourier Transform implementation. */
 
@@ -54,8 +54,8 @@ export class FFT {
     let [fwd, bwd] = makeFftCoefficients(length);
     this.fwd = fwd;
     this.bwd = bwd;
-    this.copy = new IqBuffer(2, length);
-    this.out = new IqBuffer(2, length);
+    this.copy = new IqPool(2, length);
+    this.out = new IqPool(2, length);
     this.window = new Float32Array(length);
     this.window.fill(1);
   }
@@ -63,8 +63,8 @@ export class FFT {
   private revIndex: Int32Array;
   private fwd: ComplexArray[];
   private bwd: ComplexArray[];
-  private copy: IqBuffer;
-  private out: IqBuffer;
+  private copy: IqPool;
+  private out: IqPool;
   private window: Float32Array;
 
   /** Sets the window function for this FFT. */

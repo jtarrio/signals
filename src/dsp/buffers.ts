@@ -13,12 +13,17 @@
 // limitations under the License.
 
 /**
- * A source of pre-allocated arrays of a given size.
+ * A fixed-size pool of pre-allocated arrays.
+ *
+ * Each call to get() returns the next array of the pool, if it's already the requested size.
+ * If the next array is larger than the requested size, the function returns a subarray.
+ * If the next array is smaller than the requested size, the function allocates a new array,
+ * replaces the old array with the new array, and returns that one.
  */
-abstract class Buffer<T extends TypedArray<T>> {
+abstract class Pool<T extends TypedArray<T>> {
   /**
    * @param make A function that returns an array of the given length.
-   * @param count The number of buffers to keep around. Having more than 1 lets you modify one buffer while you use another.
+   * @param count The number of arrays to keep around. Having more than 1 lets you modify one array while you use another.
    * @param length An optional initial length for the arrays.
    */
   constructor(
@@ -47,12 +52,12 @@ abstract class Buffer<T extends TypedArray<T>> {
 }
 
 /**
- * A source of pre-allocated Uint8Array buffers of a given size.
+ * A fixed-size pool of pre-allocated Uint8Arrays.
  */
-export class U8Buffer extends Buffer<Uint8Array> {
+export class U8Pool extends Pool<Uint8Array> {
   /**
-   * @param count The number of buffers to keep around. Having more than 1 lets you modify one buffer while you use another.
-   * @param length An optional initial size for the buffers.
+   * @param count The number of arrays to keep around. Having more than 1 lets you modify one array while you use another.
+   * @param length An optional initial size for the arrays.
    */
   constructor(count: number, length?: number) {
     super((l) => new Uint8Array(l), count, length);
@@ -60,12 +65,12 @@ export class U8Buffer extends Buffer<Uint8Array> {
 }
 
 /**
- * A source of pre-allocated Float32Array buffers of a given size.
+ * A fixed-size pool of pre-allocated Float32Arrays.
  */
-export class Float32Buffer extends Buffer<Float32Array> {
+export class Float32Pool extends Pool<Float32Array> {
   /**
-   * @param count The number of buffers to keep around. Having more than 1 lets you modify one buffer while you use another.
-   * @param length An optional initial size for the buffers.
+   * @param count The number of arrays to keep around. Having more than 1 lets you modify one array while you use another.
+   * @param length An optional initial size for the arrays.
    */
   constructor(count: number, length?: number) {
     super((l) => new Float32Array(l), count, length);
@@ -73,22 +78,22 @@ export class Float32Buffer extends Buffer<Float32Array> {
 }
 
 /**
- * A source of pre-allocated [Float32Array, Float32Array] buffers of a given size.
+ * A pool of pre-allocated [Float32Array, Float32Array] array pairs.
  */
-export class IqBuffer {
+export class IqPool {
   /**
-   * @param count The number of buffers to keep around. Having more than 1 lets you modify one buffer while you use another.
-   * @param length An optional initial size for the buffers.
+   * @param count The number of array pairs to keep around. Having more than 1 lets you modify one pair while you use another.
+   * @param length An optional initial size for the arrays.
    */
   constructor(count: number, length?: number) {
-    this.buffers = new Float32Buffer(count * 2, length);
+    this.pools = new Float32Pool(count * 2, length);
   }
 
-  private buffers: Float32Buffer;
+  private pools: Float32Pool;
 
   /** Returns a pair of arrays of the given size. You may need to clear them manually. */
   get(length: number): [Float32Array, Float32Array] {
-    return [this.buffers.get(length), this.buffers.get(length)];
+    return [this.pools.get(length), this.pools.get(length)];
   }
 }
 
@@ -161,7 +166,13 @@ class RingBuffer<T extends TypedArray<T>> {
   /** Copies the provided data into the ring buffer. */
   store(data: T) {
     let count = Math.min(data.length, this.buffer.length);
-    let { dstOffset } = this.doCopy(count, data, data.length - count, this.buffer, this.writePos);
+    let { dstOffset } = this.doCopy(
+      count,
+      data,
+      data.length - count,
+      this.buffer,
+      this.writePos
+    );
     this.writePos = dstOffset;
     this.filled = Math.min(this.buffer.length, this.filled + count);
     if (this.filled == this.buffer.length) {

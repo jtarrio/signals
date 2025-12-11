@@ -15,7 +15,7 @@
 
 import { makeHilbertKernel } from "./coefficients.js";
 import { decay, FIRFilter, PLL } from "./filters.js";
-import { Float32Buffer } from "./buffers.js";
+import { Float32Pool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
 /** The sideband to demodulate. */
@@ -133,11 +133,11 @@ export class StereoSeparator {
    * @param pilotFreq The frequency of the pilot tone.
    */
   constructor(sampleRate: number, pilotFreq: number) {
-    this.buffer = new Float32Buffer(4);
+    this.pool = new Float32Pool(4);
     this.pll = new PLL(sampleRate, pilotFreq, 10);
   }
 
-  private buffer: Float32Buffer;
+  private pool: Float32Pool;
   private pll: PLL;
 
   /**
@@ -149,7 +149,7 @@ export class StereoSeparator {
    *     reconstructed stereo carrier.
    */
   separate(samples: Float32Array): { found: boolean; diff: Float32Array } {
-    let out = this.buffer.get(samples.length);
+    let out = this.pool.get(samples.length);
     for (let i = 0; i < samples.length; ++i) {
       this.pll.add(samples[i]);
       // Multiply by 4 instead of 2 so 'out' has the same level as the input samples.

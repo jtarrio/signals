@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32Buffer } from "./buffers.js";
+import { Float32Pool } from "./buffers.js";
 import { makeLowPassKernel } from "./coefficients.js";
 import { FIRFilter } from "./filters.js";
 
@@ -25,11 +25,11 @@ class Downsampler {
    */
   constructor(private ratio: number, kernel: Float32Array) {
     this.filter = new FIRFilter(kernel);
-    this.buffer = new Float32Buffer(2);
+    this.pool = new Float32Pool(2);
   }
 
   private filter: FIRFilter;
-  private buffer: Float32Buffer;
+  private pool: Float32Pool;
 
   /**
    * Returns a downsampled version of the given samples.
@@ -39,7 +39,7 @@ class Downsampler {
   downsample(samples: Float32Array): Float32Array {
     const ratio = this.ratio;
     const len = Math.floor(samples.length / ratio);
-    let output = this.buffer.get(len);
+    let output = this.pool.get(len);
     this.filter.loadSamples(samples);
     for (let i = 0; i < len; ++i) {
       output[i] = this.filter.get(Math.floor(i * ratio));

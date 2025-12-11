@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IqBuffer } from "./buffers.js";
+import { IqPool } from "./buffers.js";
 
 /**
  * Converts the given buffer of unsigned 8-bit samples into a pair of
@@ -22,10 +22,10 @@ import { IqBuffer } from "./buffers.js";
 export class U8ToFloat32 {
   /** @param length The expected length of each sample block. */
   constructor(length?: number) {
-    this.buffer = new IqBuffer(4, length);
+    this.pool = new IqPool(4, length);
   }
 
-  private buffer: IqBuffer;
+  private pool: IqPool;
 
   /**
    * @param input A buffer containing the unsigned 8-bit samples.
@@ -34,7 +34,7 @@ export class U8ToFloat32 {
   convert(input: ArrayBuffer): [Float32Array, Float32Array] {
     let u8 = new Uint8Array(input);
     const len = u8.length / 2;
-    let out = this.buffer.get(len);
+    let out = this.pool.get(len);
     const outI = out[0];
     const outQ = out[1];
     for (let i = 0; i < len; ++i) {

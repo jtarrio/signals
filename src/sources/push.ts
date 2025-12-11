@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32RingBuffer, IqBuffer } from "../dsp/buffers.js";
+import { Float32RingBuffer, IqPool } from "../dsp/buffers.js";
 import { SampleBlock, SignalSource } from "../radio/signal_source.js";
 import { PendingReadRing } from "./read_ring.js";
 
@@ -34,7 +34,7 @@ export class PushSource implements SignalSource {
     this.centerFrequency = 0;
     this.I = new Float32RingBuffer(Math.max(65536, this.sampleRate / 10));
     this.Q = new Float32RingBuffer(this.I.capacity);
-    this.outBuffer = new IqBuffer(16, 65536);
+    this.outPool = new IqPool(16, 65536);
     this.pendingReads = new PendingReadRing(8);
   }
 
@@ -42,7 +42,7 @@ export class PushSource implements SignalSource {
   private centerFrequency: number;
   private I: Float32RingBuffer;
   private Q: Float32RingBuffer;
-  private outBuffer: IqBuffer;
+  private outPool: IqPool;
   private pendingReads: PendingReadRing;
 
   async setParameter<V>(_property: string, _value: V): Promise<void | V> {}
@@ -74,7 +74,7 @@ export class PushSource implements SignalSource {
 
       if (readSize > this.I.available + remaining) break;
 
-      let [oI, oQ] = this.outBuffer.get(readSize);
+      let [oI, oQ] = this.outPool.get(readSize);
       let copied = this.I.moveTo(oI);
       if (copied > 0) this.Q.moveTo(oQ);
       if (copied < oI.length) {
@@ -102,7 +102,7 @@ export class PushSource implements SignalSource {
       return this.pendingReads.add(length);
     }
 
-    let [oI, oQ] = this.outBuffer.get(length);
+    let [oI, oQ] = this.outPool.get(length);
     this.I.moveTo(oI);
     this.Q.moveTo(oQ);
     return Promise.resolve({

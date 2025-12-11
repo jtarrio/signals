@@ -8,39 +8,39 @@ Some functions produce blocks of I/Q samples; those are stored in an array of tw
 
 ## Buffers
 
-### Buffer pools to avoid allocations whenever possible
+### Array pools to avoid allocations whenever possible
 
-The DSP library tries very hard to avoid allocating memory while it's processing data, but sometimes it's unavoidable — for example, if you modify the size of a filter or an FFT window at runtime, you may need to change the size of other memory buffers.
+The DSP library tries very hard to avoid allocating memory while it's processing data, but sometimes it's unavoidable — for example, if you modify the size of a filter or an FFT window at runtime, you may need to change the size of other memory arrays.
 
-In the [`dsp/buffers.ts`](../src/dsp/buffers.ts) file, the `Float32Buffer` and `U8Buffer` classes provide pools of preallocated buffers of different types. You can request a buffer of a particular size, and the class will give you one from the pool if it has the correct size. If not, the class will allocate a buffer of the correct size, add it to the pool, and return it.
+In the [`dsp/buffers.ts`](../src/dsp/buffers.ts) file, the `Float32Pool` and `U8Pool` classes provide pools of preallocated arrays of different types. You can request an array of a particular size, and the class will give you one from the pool if it has the correct size. If not, the class will allocate an array of the correct size, add it to the pool, and return it.
 
 ```typescript
-import { Float32Buffer, U8Buffer } from "@jtarrio/demodulator/dsp/buffers.js";
+import { Float32Pool, U8Pool } from "@jtarrio/demodulator/dsp/buffers.js";
 
 // Creates a pool of 3 Float32Arrays of 1024 elements.
-let f32buffer = new Float32Buffer(3, 1024);
-let f1 = f32buffer.get(1024); // Returns a preallocated 1024-element Float32Array from the buffer
-let f2 = f32buffer.get(1024); // Returns another preallocated Float32Array
-let f3 = f32buffer.get(1024); // Returns another preallocated Float32Array
-let f4 = f32buffer.get(1024); // Returns the same Float32Array as f1
+let f32pool = new Float32Pool(3, 1024);
+let f1 = f32pool.get(1024); // Returns a preallocated 1024-element Float32Array from the array
+let f2 = f32pool.get(1024); // Returns another preallocated Float32Array
+let f3 = f32pool.get(1024); // Returns another preallocated Float32Array
+let f4 = f32pool.get(1024); // Returns the same Float32Array as f1
 
-let f5 = f32buffer.get(2048); // Allocates a 2048-element array and stores it in the pool, replacing one of the arrays
-let f6 = f32buffer.get(2048); // Allocates another array and replaces another array in the pool
-let f7 = f32buffer.get(2048); // Allocates another array and replaces another array in the pool
-let f8 = f32buffer.get(2048); // Returns the same Float32Array as f5
+let f5 = f32pool.get(2048); // Allocates a 2048-element array and stores it in the pool, replacing one of the arrays
+let f6 = f32pool.get(2048); // Allocates another array and replaces another array in the pool
+let f7 = f32pool.get(2048); // Allocates another array and replaces another array in the pool
+let f8 = f32pool.get(2048); // Returns the same Float32Array as f5
 
 // Creates a pool of 2 Uint8Arrays of length 0.
-let u8buffer = new U8Buffer(2);
-let u1 = u8buffer.get(32); // Allocates a 32-element array, places it in the pool, and returns it.
-let u2 = u8buffer.get(64); // Allocates a 64-element array, places it in the pool, and returns it.
-let u3 = u8buffer.get(32); // The next array in the pool already has 32 elements, so it returns it (same as u1).
+let u8pool = new U8Pool(2);
+let u1 = u8pool.get(32); // Allocates a 32-element array, places it in the pool, and returns it.
+let u2 = u8pool.get(64); // Allocates a 64-element array, places it in the pool, and returns it.
+let u3 = u8pool.get(32); // The next array in the pool already has 32 elements, so it returns it (same as u1).
 ```
 
-The `IqBuffer` class is similar to the above, but it returns pairs of `Float32Array`s to fit I/Q samples.
+The `IqPool` class is similar to the above, but it returns pairs of `Float32Array`s to fit I/Q samples.
 
 ```typescript
-let iqbuffer = new IqBuffer(2, 1024);
-let iq1 = iqbuffer.get(1024); // iq[0] is a Float32Array and iq[1] is another Float32Array
+let iqpool = new IqPool(2, 1024);
+let iq1 = iqpool.get(1024); // iq[0] is a Float32Array and iq[1] is another Float32Array
 ```
 
 ### Ring buffers
