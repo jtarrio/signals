@@ -18,7 +18,7 @@ export interface SampleReceiver {
   setSampleRate(sampleRate: number): void;
 
   /** Receives samples that should be demodulated. */
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number): void;
+  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number, data?: any): void;
 }
 
 /** A "composite" sample receiver that executes its component receivers in sequence. */

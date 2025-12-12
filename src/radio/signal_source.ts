@@ -26,6 +26,8 @@ export type SampleBlock = {
   Q: Float32Array;
   /** The center frequency the source listened on when these samples were captured. */
   frequency: number;
+  /** Extra data. */
+  data?: any;
 };
 
 /** Interface for a sample source. */

@@ -20,7 +20,11 @@
 import { RadioError, RadioErrorType } from "../errors.js";
 import { Channel } from "./msgqueue.js";
 import { SampleReceiver } from "./sample_receiver.js";
-import { SignalSource, SignalSourceProvider } from "./signal_source.js";
+import {
+  SampleBlock,
+  SignalSource,
+  SignalSourceProvider,
+} from "./signal_source.js";
 
 /** A message sent to the state machine. */
 type Message<ParameterKey extends string> =
@@ -135,6 +139,9 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   getParameter(parameter: ParameterKey): any {
     return this.parameterValues.get(parameter);
   }
+
+  /** Override this function to do something when a sample block is received. */
+  onReceiveSamples(block: SampleBlock) {}
 
   /** Runs the state machine. */
   private async runLoop() {
@@ -285,7 +292,8 @@ class Transfers {
     try {
       while (this.buffersRunning <= this.buffersWanted) {
         const b = await this.source.readSamples(this.samplesPerBuf);
-        this.sampleReceiver.receiveSamples(b.I, b.Q, b.frequency);
+        this.radio.onReceiveSamples(b);
+        this.sampleReceiver.receiveSamples(b.I, b.Q, b.frequency, b.data);
       }
     } catch (e) {
       let error = new RadioError(
