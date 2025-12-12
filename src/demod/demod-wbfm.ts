@@ -175,7 +175,7 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
       (options?.deemphasizerTc === undefined ? 50 : options.deemphasizerTc) /
       1e6;
     const filterF = Math.min(15000, outRate / 2);
-    const kernel = makeLowPassKernel(inRate, filterF, 41, 1 / 0.45);
+    const kernel = makeLowPassKernel(inRate, filterF, 41, 1 / 0.9);
     this.monoSampler = new RealDownsampler(inRate, outRate, kernel);
     this.stereoSampler = new RealDownsampler(inRate, outRate, kernel);
     this.stereoSeparator = new StereoSeparator(inRate, pilotF);
@@ -214,8 +214,8 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
         let leftAudio = this.outPool.get(audio.length);
         let rightAudio = audio;
         for (let i = 0; i < diffAudio.length; ++i) {
-          leftAudio[i] = (audio[i] - diffAudio[i]) / 2;
-          rightAudio[i] = (audio[i] + diffAudio[i]) / 2;
+          leftAudio[i] = audio[i] - diffAudio[i];
+          rightAudio[i] = audio[i] + diffAudio[i];
         }
         this.leftDeemph.inPlace(leftAudio);
         this.rightDeemph.inPlace(rightAudio);

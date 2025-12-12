@@ -341,7 +341,7 @@ export function wbfmSignal(
   }
   if (tcMicros === undefined) tcMicros = 50;
   if (right === undefined)
-    return amplify(0.45, preemphasis(tcMicros, real(left)));
+    return amplify(0.9, preemphasis(tcMicros, real(left)));
 
   const pilot = real(tone(19000, 0.1, -Math.PI / 2));
   const shift = real(tone(38000, 1, -Math.PI / 2));

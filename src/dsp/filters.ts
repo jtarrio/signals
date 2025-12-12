@@ -466,11 +466,8 @@ export class PLL {
     this.pqFlt = new IIRLowPassChain(4, sampleRate, 250);
     this.lbI = 0;
     this.lbQ = 0;
-    this.sgnLockFlt = new IIRLowPass(sampleRate, 10);
-    this.sgnLockThreshold = ((90 / 360) * 2 * Math.PI) / sampleRate;
-    this.absLockFlt = new IIRLowPass(sampleRate, 10);
-    this.absLockThreshold = (15 * 2 * Math.PI) / sampleRate;
-    this.lockCounter = 0;
+    this.iMagFlt = new IIRLowPass(sampleRate, 7);
+    this.bMagFlt = new IIRLowPass(sampleRate, 7);
     this.cos = 1;
     this.sin = 0;
     this.locked = true;
@@ -489,11 +486,8 @@ export class PLL {
   private pqFlt: IIRFilter;
   private lbI: number;
   private lbQ: number;
-  private sgnLockFlt: IIRFilter;
-  private sgnLockThreshold: number;
-  private absLockFlt: IIRFilter;
-  private absLockThreshold: number;
-  private lockCounter: number;
+  private iMagFlt: IIRFilter;
+  private bMagFlt: IIRFilter;
   public cos: number;
   public sin: number;
   public locked: boolean;
@@ -557,18 +551,11 @@ export class PLL {
     const freqCorrectionHz = (speedCorr * this.sampleRate) / (2 * Math.PI);
     const shift = this.biFlt.phaseShift(freqCorrectionHz);
     const phaseDiff = atan2(dQ, dI) + shift;
-
-    // Check if we are locked (the phase correction is more or less stable)
-    const deriv = this.phaseCorrection - phaseDiff;
-    let sgnDeriv = this.sgnLockFlt.add(deriv);
-    let absDeriv = this.absLockFlt.add(Math.abs(deriv));
     this.phaseCorrection = phaseDiff;
-    if (absDeriv < this.absLockThreshold && sgnDeriv < this.sgnLockThreshold) {
-      this.lockCounter++;
-    } else {
-      this.lockCounter = 0;
-    }
 
-    this.locked = this.lockCounter > 20;
+    // Check if we are locked
+    let mag = this.iMagFlt.add(Math.abs(sample));
+    let bimag = this.bMagFlt.add(Math.hypot(bI, bQ) * 2);
+    this.locked = bimag > mag / 15;
   }
 }

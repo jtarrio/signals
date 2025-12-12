@@ -21,9 +21,8 @@ import {
   tone,
   wbfmSignal,
 } from "../../src/sources/generators.js";
-import { fftSpectrum, IQ, iqRmsd, rmsd } from "../testutil.js";
+import { IQ, iqRmsd, rmsd } from "../testutil.js";
 import { Preemphasis } from "../../src/dsp/filters.js";
-import { FFT } from "../../src/dsp/fft.js";
 
 describe("tone", () => {
   const len = 4800;
@@ -201,7 +200,7 @@ describe("wbfmSignal", () => {
     gen(0, sampleRate, 0, outI, outQ);
 
     let expected = new Float32Array(len).map(
-      (_, i) => 0.45 * Math.cos((2 * Math.PI * 1234 * i) / sampleRate)
+      (_, i) => 0.9 * Math.cos((2 * Math.PI * 1234 * i) / sampleRate)
     );
     new Preemphasis(sampleRate, tcMicros / 1e6).inPlace(expected);
     assert.isAtMost(rmsd(outI, expected), 1e-6);

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { test, assert } from "vitest";
+import { test, assert, describe } from "vitest";
 import {
   add,
   addDc,
@@ -304,12 +304,12 @@ test("FrequencyShifter", () => {
   assert.isAtMost(iqRmsd(input, expected), 0.0005);
 });
 
-test("PLL", () => {
+describe("PLL", () => {
   const sampleRate = 48000;
   const len = sampleRate / 2;
 
   // Freq, amplitude, phase, noise, expectedRMSD
-  const cases = [
+  const lockedCases = [
     [19000, 1, 0, 0, 1e-7],
     [19002, 1, 0, 0, 2e-4],
     [18998, 1, 0, 0, 2e-4],
@@ -331,28 +331,72 @@ test("PLL", () => {
     [19000, 0.2, Math.PI / 2, 0.1, 1e-3],
     [19002, 0.2, Math.PI / 2, 0.1, 1e-3],
     [18998, 0.2, Math.PI / 2, 0.1, 1e-3],
+    [19000, 0.1, Math.PI / 2, 0.9, 7e-3],
+    [19002, 0.1, Math.PI / 2, 0.9, 7e-3],
+    [18998, 0.1, Math.PI / 2, 0.9, 7e-3],
   ];
 
-  for (let testCase of cases) {
-    const [toneFreq, toneAmpl, tonePhase, noiseAmpl, expected] = testCase;
-    let tone = sineTone(len, sampleRate, toneFreq, toneAmpl, tonePhase);
-    let input = add(noise(len, noiseAmpl), tone);
+  for (const [
+    toneFreq,
+    toneAmpl,
+    tonePhase,
+    noiseAmpl,
+    expected,
+  ] of lockedCases) {
+    test(`Locked for ${toneFreq}Hz phase=${tonePhase} ampl=${toneAmpl} noise=${noiseAmpl}`, () => {
+      let tone = sineTone(len, sampleRate, toneFreq, toneAmpl, tonePhase);
+      let input = add(noise(len, noiseAmpl), tone);
 
-    let pll = new PLL(sampleRate, 19000, 10);
-    let output = new Float32Array(input.length);
-    for (let i = 0; i < output.length; ++i) {
-      pll.add(input[i]);
-      output[i] = pll.cos * toneAmpl;
-    }
+      let pll = new PLL(sampleRate, 19000, 10);
+      let output = new Float32Array(input.length);
+      for (let i = 0; i < output.length; ++i) {
+        pll.add(input[i]);
+        output[i] = pll.cos * toneAmpl;
+      }
 
-    assert.isTrue(
-      pll.locked,
-      `Expected PLL locked for freq ${toneFreq} ampl ${toneAmpl} phase ${tonePhase} noise ${noiseAmpl}`
-    );
-    assert.isAtMost(
-      rmsd(tone.subarray(len - 5000), output.subarray(len - 5000)),
-      expected,
-      `Expected RMSD exceeded for freq ${toneFreq} ampl ${toneAmpl} phase ${tonePhase} noise ${noiseAmpl}`
-    );
+      assert.isTrue(pll.locked);
+      assert.isAtMost(
+        rmsd(tone.subarray(len - 5000), output.subarray(len - 5000)),
+        expected
+      );
+    });
+  }
+
+  const noLockCases = [
+    [10, 0, 0],
+    [10, 0, 1],
+    [10, 1, 0],
+    [10, 0, 1],
+    [10000, 1, 0],
+    [10000, 0.5, 1],
+    [18000, 1, 0],
+    [18000, 0.5, 1],
+    [18900, 1, 0],
+    [18950, 1, 0],
+    [19050, 1, 0],
+    [19100, 1, 0],
+    [20000, 1, 0],
+    [20000, 0.5, 1],
+  ];
+
+  for (const [freq, ampl, noiseAmpl] of noLockCases) {
+    test(`No lock for ${freq}Hz ampl=${ampl} noise=${noiseAmpl}`, () => {
+      let tone = sineTone(len, sampleRate, freq, ampl);
+      let input = add(noise(len, noiseAmpl), tone);
+      let pll = new PLL(sampleRate, 19000, 10);
+      let output = new Float32Array(input.length);
+      let noLockFor = 0;
+      for (let i = 0; i < output.length; ++i) {
+        pll.add(input[i]);
+        output[i] = pll.cos * (ampl === undefined ? 1 : ampl);
+        if (pll.locked) {
+          noLockFor = 0;
+        } else {
+          noLockFor++;
+        }
+      }
+
+      assert.isAtLeast(noLockFor, len * 0.75);
+    });
   }
 });
