@@ -1,4 +1,4 @@
-# _Demodulator_ Radio API
+# Signals' Radio API
 
 The Radio API lets you operate a multimode radio receiver in not many lines of code.
 
@@ -13,7 +13,7 @@ The API also provides a [`Demodulator`](../src/demod/demodulator.ts) class, whic
 To use the [`Radio`](../src/radio/radio.ts) API, import the following module:
 
 ```typescript
-import { Radio } from "@jtarrio/demodulator/radio.js";
+import { Radio } from "@jtarrio/signals/radio.js";
 ```
 
 ### Create a `Radio`
@@ -25,7 +25,7 @@ The constructor for the [`Radio`](../src/radio/radio.ts) class takes two argumen
 We need a [`SignalSource`](../src/radio/signal_source.ts) object and a [`SampleReceiver`](../src/radio/sample_receiver.ts) object to create the [`Radio`](../src/radio/radio.ts). For this example, we will create a tone generator and a sample receiver logs the number of samples that were received in each block. (There will be a full explanation of the [`SignalSource`](../src/radio/signal_source.ts) and [`SampleReceiver`](../src/radio/sample_receiver.ts) interfaces later.)
 
 ```typescript
-import { RealTimeSource, SimpleProvider } from "@jtarrio/demodulator/radio.js";
+import { RealTimeSource, SimpleProvider } from "@jtarrio/signals/radio.js";
 
 class MyReceiver {
   setSampleRate(sampleRate) {}
@@ -159,7 +159,7 @@ You don't need to import anything if you use JavaScript. If you use TypeScript, 
 import {
   SignalSource,
   SignalSourceProvider,
-} from "@jtarrio/demodulator/radio.js";
+} from "@jtarrio/signals/radio.js";
 ```
 
 ### Method `setSampleRate()`
@@ -229,10 +229,10 @@ The arrays in the `I` and `Q` properties have the same number of elements, and e
 
 ## The `RealTimeSource` class
 
-_Demodulator_ provides a [`RealTimeSource`](../src/sources/realtime.ts) class, which is a [`SignalSource`](../src/radio/signal_source.ts) implementation that calls a function at periodic intervals to generate samples in real time.
+Signals provides a [`RealTimeSource`](../src/sources/realtime.ts) class, which is a [`SignalSource`](../src/radio/signal_source.ts) implementation that calls a function at periodic intervals to generate samples in real time.
 
 ```typescript
-import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
 
 let source = new RealTimeSource(mySignalGenerator);
 ```
@@ -267,7 +267,7 @@ function mySignalGenerator(startSample, sampleRate, centerFrequency, I, Q) {
 }
 ```
 
-_Demodulator_ comes with a few [predefined generator functions](../src/sources/generators.ts):
+Signals comes with a few [predefined generator functions](../src/sources/generators.ts):
 
 - `tone(frequency, amplitude)`: generates a tone at the given frequency with the given amplitude.
 - `noise(amplitude)`: generates some noise with the given maximum amplitude.
@@ -275,6 +275,8 @@ _Demodulator_ comes with a few [predefined generator functions](../src/sources/g
 - `product(carrier, signal)`: multiplies each sample of the `carrier` generator with the corresponding sample of the `signal` generator.
 - `modulateAM(carrierFreq, amplitude, signal)`: modulates the output of the `signal` generator in AM with a carrier with the given center frequency and amplitude. Only the I component of the `signal` generator's output is used.
 - `modulateFM(carrierFreq, maximumDeviation, amplitude, signal)`: modulates the output of the `signal` generator in FM with a carrier with the given center frequency, maximum deviation, and amplitude. Only the I component of the `signal` generator's output is used.
+- `wbfmSignal(mono, tcMicros?)`: generates a mono baseband signal that's suitable for modulating with WBFM, from the given signal. The optional `tcMicros` parameter lets you specify a time constant for the pre-emphasis filter (50 microseconds by default.)
+- `wbfmSignal(left, right, tcMicros?)`: generates a stereo baseband signal that's suitable for modulating with WBFM, from the given left and right signals. The optional `tcMicros` parameter lets you specify a time constant for the pre-emphasis filter (50 microseconds by default.)
 
 The following example shows a [`RealTimeSource`](../src/sources/realtime.ts) that includes several signals in different frequencies, with different modulation schemes, using some of the above generator functions:
 
@@ -285,12 +287,12 @@ import {
   noise,
   sum,
   tone,
-} from "@jtarrio/demodulator/sources/generators.js";
-import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+} from "@jtarrio/signals/sources/generators.js";
+import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
 
 let source = new RealTimeSource(
   sum(
-    modulateFM(88500000, 75000, 0.1, tone(600, 0.5)),
+    modulateFM(88500000, 75000, 0.1, wbfmSignal(tone(600, 0.5))),
     modulateAM(810000, 0.1, tone(600, 0.5)),
     tone(14020600, 0.1),
     noise(0.01)
@@ -303,9 +305,9 @@ let source = new RealTimeSource(
 The [`SimpleProvider`](../src/sources/provider.ts) class is an implementation of [`SignalSourceProvider`](../src/radio/signal_source.ts) that takes a [`SignalSource`](../src/radio/signal_source.ts) object in its constructor and always returns that object when `get()` is called.
 
 ```typescript
-import { tone } from "@jtarrio/demodulator/sources/generators.js";
-import { SimpleProvider } from "@jtarrio/demodulator/sources/provider.js";
-import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+import { tone } from "@jtarrio/signals/sources/generators.js";
+import { SimpleProvider } from "@jtarrio/signals/sources/provider.js";
+import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
 
 let source = new RealTimeSource(tone(14020600, 0.1));
 let provider = new SimpleProvider(source);
@@ -322,7 +324,7 @@ You can create your own [`SampleReceiver`](../src/radio/sample_receiver.ts) obje
 You don't need to import anything if you use JavaScript. If you use TypeScript, you should import the [`SampleReceiver`](../src/radio/sample_receiver.ts) type:
 
 ```typescript
-import { SampleReceiver } from "@jtarrio/demodulator/radio.js";
+import { SampleReceiver } from "@jtarrio/signals/radio.js";
 ```
 
 ### Method `setSampleRate()`
@@ -368,7 +370,7 @@ class PowerLogger implements SampleReceiver {
 
 ## The `Demodulator` class
 
-_Demodulator_ provides a [`Demodulator`](../src/demod/empty-demodulator.ts) class, which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) implementation that can demodulate FM, AM, SSB, and CW signals. By default, it will play the demodulated audio on the speakers or headphones using the Web Audio API, but if you want to do something else (for example, record it in a file or send it over the network), you can provide your own code to do that.
+Signals provides a [`Demodulator`](../src/demod/empty-demodulator.ts) class, which is a [`SampleReceiver`](../src/radio/sample_receiver.ts) implementation that can demodulate FM, AM, SSB, and CW signals. By default, it will play the demodulated audio on the speakers or headphones using the Web Audio API, but if you want to do something else (for example, record it in a file or send it over the network), you can provide your own code to do that.
 
 ### Modes
 
@@ -379,7 +381,7 @@ import {
   getMode,
   getSchemes,
   modeParameters,
-} from "@jtarrio/demodulator/demod/modes.js";
+} from "@jtarrio/signals/demod/modes.js";
 ```
 
 The `getSchemes()` function returns the names of all available modulation schemes (WBFM, NBFM, AM, USB, LSB, and CW).
@@ -428,7 +430,7 @@ let newMode = params.mode;
 ### Create the demodulator
 
 ```typescript
-import { Demodulator } from "@jtarrio/demodulator/demod/demodulator.js";
+import { Demodulator } from "@jtarrio/signals/demod/demodulator.js";
 ```
 
 The [`Demodulator`](../src/demod/empty-demodulator.ts)'s constructor can take an `options` argument, which is an object with the following properties:
@@ -602,7 +604,7 @@ Sometimes you may want the [`Radio`](../src/radio/radio.ts) to send samples to m
 The application achieves this with a [`CompositeReceiver`](../src/radio/sample_receiver.ts). Every time one of the methods of the [`CompositeReceiver`](../src/radio/sample_receiver.ts) object is called, it will call the same method in every component receiver.
 
 ```typescript
-import { CompositeReceiver } from "@jtarrio/demodulator/radio.js";
+import { CompositeReceiver } from "@jtarrio/signals/radio.js";
 
 let provider = new MyProvider();
 let demodulator = new Demodulator();
@@ -643,7 +645,7 @@ This class also has a `getSpectrum()` method that takes a `Float32Array` that wi
 Each element of the populated array contains the power for that frequency bin in decibels (dB). The first half of the elements contains the positive frequency bins, and the second half contains the negative frequency bins.
 
 ```typescript
-import { Spectrum } from "@jtarrio/demodulator/demod/spectrum.js";
+import { Spectrum } from "@jtarrio/signals/demod/spectrum.js";
 
 let provider = new MyProvider();
 let demodulator = new Demodulator();

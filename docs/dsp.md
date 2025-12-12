@@ -1,6 +1,6 @@
-# _Demodulator_'s DSP library
+# Signals' DSP library
 
-If you want to implement your own demodulator, you can use _Demodulator_'s built-in DSP library. Note that it is quite specialized to _Demodulator_'s needs, so you may need to write your own DSP functions or use a third-party library.
+If you want to implement your own demodulator, you can use Signals' built-in DSP library. Note that it is quite specialized to Signals' needs, so in some cases you may need to write your own DSP functions or use a third-party library.
 
 The DSP library operates on blocks of samples stored in `Float32Array`s with values normally ranging between -1 and 1.
 
@@ -15,7 +15,7 @@ The DSP library tries very hard to avoid allocating memory while it's processing
 In the [`dsp/buffers.ts`](../src/dsp/buffers.ts) file, the `Float32Pool` and `U8Pool` classes provide pools of preallocated arrays of different types. You can request an array of a particular size, and the class will give you one from the pool if it has the correct size. If not, the class will allocate an array of the correct size, add it to the pool, and return it.
 
 ```typescript
-import { Float32Pool, U8Pool } from "@jtarrio/demodulator/dsp/buffers.js";
+import { Float32Pool, U8Pool } from "@jtarrio/signals/dsp/buffers.js";
 
 // Creates a pool of 3 Float32Arrays of 1024 elements.
 let f32pool = new Float32Pool(3, 1024);
@@ -64,7 +64,7 @@ Note that `moveTo()` does not affect the data that will be returned by `copyTo()
 How to use a ring buffer as a fixed-size buffer:
 
 ```typescript
-import { Float32RingBuffer } from "@jtarrio/demodulator/dsp/buffers.js";
+import { Float32RingBuffer } from "@jtarrio/signals/dsp/buffers.js";
 
 // Creates a 64-element ring buffer
 let rb = new Float32RingBuffer(64);
@@ -82,7 +82,7 @@ rb.copyTo(latest);
 How to use a ring buffer to decouple differently-sized reads and writes:
 
 ```typescript
-import { Float32RingBuffer } from "@jtarrio/demodulator/dsp/buffers.js";
+import { Float32RingBuffer } from "@jtarrio/signals/dsp/buffers.js";
 
 let rb = new Float32RingBuffer(128);
 
@@ -109,8 +109,8 @@ The [`dsp/coefficients.ts`](../src/dsp/coefficients.ts) file contains a `makeLow
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `FIRFilter` class that lets you apply an arbitrary filter kernel via convolution. You can use it to filter a `Float32Array` in place or to extract individual filtered samples.
 
 ```typescript
-import { makeLowPassKernel } from "@jtarrio/demodulator/dsp/coefficients.js";
-import { FIRFilter } from "@jtarrio/demodulator/dsp/filters.js";
+import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
+import { FIRFilter } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 1024000;
 const cornerFreq = 75000;
@@ -138,8 +138,8 @@ You can also use the FIR filter to perform a Hilbert transform with the `makeHil
 The FIR filter introduces some delay, which would make adding the transformed and original signals together a little hard. To solve this, the `FIRFilter` class provides a `getDelayed()` method. This method works as if the `FIRFilter` class had received a kernel consisting of all zeroes and a 1 in the center element, but avoids performing unnecessary convolutions.
 
 ```typescript
-import { makeHilbertKernel } from "@jtarrio/demodulator/dsp/coefficients.js";
-import { FIRFilter } from "@jtarrio/demodulator/dsp/filters.js";
+import { makeHilbertKernel } from "@jtarrio/signals/dsp/coefficients.js";
+import { FIRFilter } from "@jtarrio/signals/dsp/filters.js";
 
 const kernelLen = 151;
 let hilbert = makeHilbertKernel(kernelLen);
@@ -168,7 +168,7 @@ The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains several classes that
 All these filters have an `inPlace()` method as well as an `add()` method that filters single samples, a `value` getter that returns the filters' current output, and a `phaseShift()` method that returns the filter's phase shift for a given frequency.
 
 ```typescript
-import { Deemphasis } from "@jtarrio/demodulator/dsp/filters.js";
+import { Deemphasis } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 1024000;
 const tc = 50e-6; // 50 microseconds
@@ -195,7 +195,7 @@ The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains a `DCBlocker` c
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `PLL` class that implements a phase-locked loop that can follow a real sinusoidal wave of a specified frequency with a specified tolerance. This implementation is optimized to follow a steady 19,000 Hz tone, but it should be usable for any frequency.
 
 ```typescript
-import { PLL } from "@jtarrio/demodulator/dsp/filters.js";
+import { PLL } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 336000;
 let pll = new PLL(sampleRate, 19000, 10);
@@ -217,7 +217,7 @@ for (let i = 0; i < samples.length; ++i) {
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `FrequencyShifter` class that mixes an input array with a complex sinusoidal to shift the frequencies of all the signals in the input array by a given value.
 
 ```typescript
-import { FrequencyShifter } from "@jtarrio/demodulator/dsp/filters.js";
+import { FrequencyShifter } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 1024000;
 let shifter = new FrequencyShifter(sampleRate);
@@ -231,7 +231,7 @@ shifter.inPlace(samples[0], samples[1], 1500); // Shifts every signal in `sample
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains an `AGC` class that applies gain automatically to an input signal so it will stay close to full scale. When the input signal's power stays low for over 1 second, the `AGC` class will increase the gain over time until the output reaches 90% of the available power or the maximum gain is reached. If the output power exceeds 100%, the `AGC` class will reduce the amount of gain immediately.
 
 ```typescript
-import { AGC } from "@jtarrio/demodulator/dsp/filters.js";
+import { AGC } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 1024000;
 const timeConstant = 3; // seconds
@@ -251,7 +251,7 @@ These classes work best when there is an integer ratio between the input and out
 import {
   ComplexDownsampler,
   RealDownsampler,
-} from "@jtarrio/demodulator/dsp/resamplers.js";
+} from "@jtarrio/signals/dsp/resamplers.js";
 
 const inputSampleRate = 1024000;
 const outputSampleRate = 256000;
@@ -291,7 +291,7 @@ Additionally, this file contains a `StereoSeparator` class that extracts the ste
 import {
   FMDemodulator,
   StereoSeparator,
-} from "@jtarrio/demodulator/dsp/demodulators.js";
+} from "@jtarrio/signals/dsp/demodulators.js";
 
 const sampleRate = 1024000;
 const maxDev = 75000;
@@ -334,8 +334,8 @@ The `FFTOutput` type is an array with two elements, both of type `Float32Array`.
 The [`dsp/coefficients.ts`](../src/dsp/coefficients.ts) file contains an implementation of the Blackman window in the `makeBlackmanWindow()` method.
 
 ```typescript
-import { FFT } from "@jtarrio/demodulator/dsp/fft.js";
-import { makeBlackmanWindow } from "@jtarrio/demodulator/dsp/coefficients.js";
+import { FFT } from "@jtarrio/signals/dsp/fft.js";
+import { makeBlackmanWindow } from "@jtarrio/signals/dsp/coefficients.js";
 
 let fft = FFT.ofLength(1024);
 fft.setWindow(makeBlackmanWindow(fft.lenght));

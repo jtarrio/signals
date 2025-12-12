@@ -1,19 +1,20 @@
-import { Demodulator } from "@jtarrio/demodulator/demod/demodulator.js";
+import { Demodulator } from "@jtarrio/signals/demod/demodulator.js";
 import {
   getMode,
   getSchemes,
   modeParameters,
-} from "@jtarrio/demodulator/demod/modes.js";
-import { Radio } from "@jtarrio/demodulator/radio/radio.js";
+} from "@jtarrio/signals/demod/modes.js";
+import { Radio } from "@jtarrio/signals/radio/radio.js";
 import {
   modulateAM,
   modulateFM,
   noise,
   sum,
   tone,
-} from "@jtarrio/demodulator/sources/generators.js";
-import { SimpleProvider } from "@jtarrio/demodulator/sources/provider.js";
-import { RealTimeSource } from "@jtarrio/demodulator/sources/realtime.js";
+  wbfmSignal,
+} from "@jtarrio/signals/sources/generators.js";
+import { SimpleProvider } from "@jtarrio/signals/sources/provider.js";
+import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
 
 var elements = {};
 var demodulator;
@@ -23,7 +24,7 @@ var knownModes = {};
 async function main() {
   let source = new RealTimeSource(
     sum(
-      modulateFM(88500000, 75000, 0.1, tone(600, 0.5)),
+      modulateFM(88500000, 75000, 0.1, wbfmSignal(tone(600, 0.5))),
       modulateAM(810000, 0.1, tone(600, 0.5)),
       tone(14020600, 0.1),
       noise(0.01)

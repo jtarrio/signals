@@ -1,10 +1,10 @@
-# Creating demodulators for _Demodulator_
+# Creating demodulators for Signals
 
-_Demodulator_ comes with support for FM (wideband and narrowband), AM, SSB, and CW, but if your application needs to support additional modulation schemes, you can add them.
+Signals comes with support for FM (wideband and narrowband), AM, SSB, and CW, but if your application needs to support additional modulation schemes, you can add them.
 
 ## Create a new modulation scheme
 
-In _Demodulator_, a modulation scheme has the following elements:
+In Signals, a modulation scheme has the following elements:
 
 - A short name, or "scheme name." It should be a short word or initialism, like "WBFM," "AM," or "USB."
 - Mode parameters. This is an object that stores the configuration for the demodulator: bandwidth, maximum deviation, squelch level, whether stereo is enabled, etc.
@@ -13,7 +13,7 @@ In _Demodulator_, a modulation scheme has the following elements:
 
 ### Choose a scheme name
 
-_Demodulator_ uses this scheme name internally to refer to your modulation scheme. Many programs will also show these names to the user, so your scheme name should be short, uncomplicated, and human-friendly.
+Signals uses this scheme name internally to refer to your modulation scheme. Many programs will also show these names to the user, so your scheme name should be short, uncomplicated, and human-friendly.
 
 #### Example
 
@@ -57,7 +57,7 @@ The [`Demodulated`](../src/demod/modes.ts) object has the following fields:
 A demodulator for a double-sideband suppressed carrier signal could look like this in Typescript:
 
 ```typescript
-import { Demod, Demodulated } from "@jtarrio/demodulator/demod/modes.js";
+import { Demod, Demodulated } from "@jtarrio/signals/demod/modes.js";
 
 class DemodDSB implements Demod<ModeDSB> {
   constructor(inRate: number, private outRate: number, private mode: ModeDSB) {
@@ -119,7 +119,7 @@ Additionally, if any parameters are settable (bandwidth, stereo, squelch), you m
 A configurator for the DSB scheme could look like this in TypeScript:
 
 ```typescript
-import { Configurator } from "@jtarrio/demodulator/demod/modes.js";
+import { Configurator } from "@jtarrio/signals/demod/modes.js";
 
 export class ConfigDSB extends Configurator<ModeDSB> {
   constructor(mode: ModeDSB | string) {
@@ -157,7 +157,7 @@ After you register the scheme, it will become available through the `getSchemes(
 #### Example
 
 ```typescript
-import { registerDemod } from "@jtarrio/demodulator/demod/modes.js";
+import { registerDemod } from "@jtarrio/signals/demod/modes.js";
 
 registerDemod("WBFM", DemodWBFM, ConfigWBFM);
 ```
@@ -166,15 +166,15 @@ registerDemod("WBFM", DemodWBFM, ConfigWBFM);
 
 After you register your demodulation scheme, it will become available to the [`Demodulator`](../src/demod/empty-demodulator.ts) class.
 
-When you import the demodulator through the `@jtarrio/demodulator/demod/demodulator` module, some modulation schemes will be registered by default. If you don't want them, you can import the demodulator through the `@jtarrio/demodulator/demod/empty-demodulator` module instead.
+When you import the demodulator through the `@jtarrio/signals/demod/demodulator` module, some modulation schemes will be registered by default. If you don't want them, you can import the demodulator through the `@jtarrio/signals/demod/empty-demodulator` module instead.
 
 #### Example
 
 Default demodulator:
 
 ```typescript
-import { Demodulator } from "@jtarrio/demodulator/demod/demodulator.js";
-import { getSchemes } from "@jtarrio/demodulator/demod/modes.js";
+import { Demodulator } from "@jtarrio/signals/demod/demodulator.js";
+import { getSchemes } from "@jtarrio/signals/demod/modes.js";
 
 console.log(getSchemes()); // WBFM, NBFM, AM, USB, LSB, CW
 ```
@@ -182,8 +182,8 @@ console.log(getSchemes()); // WBFM, NBFM, AM, USB, LSB, CW
 Empty demodulator:
 
 ```typescript
-import { Demodulator } from "@jtarrio/demodulator/demod/empty-demodulator.js";
-import { getSchemes } from "@jtarrio/demodulator/demod/modes.js";
+import { Demodulator } from "@jtarrio/signals/demod/empty-demodulator.js";
+import { getSchemes } from "@jtarrio/signals/demod/modes.js";
 
 console.log(getSchemes()); // (empty)
 ```
@@ -195,7 +195,7 @@ In WBFM, the demodulated signal often has some extra information modulated withi
 - Stereo signals contain a pilot tone at 19 kHz and a "stereo difference signal" at 38 kHz.
 - Some FM stations transmit RDS or RBDS digital signals at 57 kHz.
 
-_Demodulator_ has the ability to demodulate the stereo signal but not RDS/RBDS. However, it can be extended to add this ability. To that end, the WBFM demodulator is split into two stages:
+Signals has the ability to demodulate the stereo signal but not RDS/RBDS. However, it can be extended to add this ability. To that end, the WBFM demodulator is split into two stages:
 
 - [`DemodWBFMStage1`](../src/demod/demod-wbfm.ts) does the FM demodulation and produces the raw signal with the mono audio, pilot, stereo, RDS/RDBS, etc.
 - [`DemodWBFMStage2`](../src/demod/demod-wbfm.ts) takes the signal from stage 1 and does stereo separation and reconstruction.

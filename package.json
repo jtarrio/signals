@@ -1,12 +1,12 @@
 {
-  "name": "@jtarrio/demodulator",
+  "name": "@jtarrio/signals",
   "description": "Demodulate radio signals in your JavaScript or TypeScript application",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "author": "Jacobo Tarrio <jtarrio@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jtarrio/demodulator.git"
+    "url": "git+https://github.com/jtarrio/signals.git"
   },
   "exports": {
     "./*.js": "./dist/*.js"
