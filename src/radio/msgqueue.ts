@@ -12,42 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/** The type returned by the Channel.receive() function. */
+type ReceivedMessage<MsgType, AckType = void> = {
+  msg: MsgType;
+  ack: (_: AckType) => void;
+};
+
 /** A message channel, in which messages are sent and received asynchronously. */
-export class Channel<Msg> {
+export class Channel<MsgType, AckType = void> {
   constructor() {
-    this.msgQueue = [];
-    this.notifyQueue = [];
+    this.sendQueue = [];
+    this.rcvQueue = [];
   }
 
   /** Messages waiting to be delivered. */
-  private msgQueue: Msg[];
+  private sendQueue: ReceivedMessage<MsgType, AckType>[];
   /** Clients waiting to receive messages. */
-  private notifyQueue: ((msg: Msg) => void)[];
+  private rcvQueue: ((msg: MsgType) => Promise<AckType>)[];
 
   /**
    * Sends a message.
    *
    * If there is a client waiting to receive a message, it is delivered straight to it.
    * Otherwise, the message is added to the queue.
+   *
+   * @returns a promise that resolves when the receiver of the message acknowledges it.
    */
-  send(msg: Msg) {
-    let notif = this.notifyQueue.shift();
-    if (notif !== undefined) {
-      notif(msg);
-    } else {
-      this.msgQueue.push(msg);
+  async send(msg: MsgType): Promise<AckType> {
+    let rcv = this.rcvQueue.shift();
+    if (rcv !== undefined) {
+      return rcv(msg);
     }
+    let { promise, resolve } = Promise.withResolvers<AckType>();
+    this.sendQueue.push({ msg, ack: resolve });
+    return promise;
   }
 
   /**
-   * Receives a message, returning a promise.
+   * Receives a message.
    *
-   * If there is a message in the queue, the promise resolves to that message.
-   * Otherwise, the promise will resolve when a message is received.
+   * @returns a promise that resolves to a message and to an acknowledgement function.
+   * This acknowledgement function must be called after processing the message so the promise
+   * returned by the send() function will be resolved.
    */
-  receive(): Promise<Msg> {
-    let msg = this.msgQueue.shift();
-    if (msg !== undefined) return Promise.resolve(msg);
-    return new Promise((r) => this.notifyQueue.push(r));
+  receive(): Promise<ReceivedMessage<MsgType, AckType>> {
+    let sent = this.sendQueue.shift();
+    if (sent !== undefined) {
+      return Promise.resolve(sent);
+    }
+    let msgPR = Promise.withResolvers<ReceivedMessage<MsgType, AckType>>();
+    this.rcvQueue.push((msg: MsgType): Promise<AckType> => {
+      let ackPR = Promise.withResolvers<AckType>();
+      msgPR.resolve({ msg: msg, ack: ackPR.resolve });
+      return ackPR.promise;
+    });
+    return msgPR.promise;
   }
 }

@@ -41,6 +41,9 @@ async function main() {
   demodulator.setVolume(1);
   demodulator.setMode(getMode("AM"));
 
+  // Wait until all the radio commands have completed.
+  await radio.ready();
+
   // Receive radio and demodulator events.
   radio.addEventListener("radio", onRadio);
   demodulator.addEventListener("stereo-status", onStereoStatus);

@@ -31,7 +31,8 @@ type Message<ParameterKey extends string> =
   | { type: "start" }
   | { type: "stop" }
   | { type: "frequency"; value: number }
-  | { type: "parameter"; name: ParameterKey; value: any };
+  | { type: "parameter"; name: ParameterKey; value: any }
+  | { type: "ready" };
 
 /** The information in a 'radio' event. */
 export type RadioEventType =
@@ -67,7 +68,18 @@ export type RadioOptions = {
   buffersPerSecond?: number;
 };
 
-/** Provides controls to play, stop, and tune the radio. */
+/**
+ * Provides controls to play, stop, and tune the radio.
+ *
+ * The command functions (start, stop, setParameter, etc) return promises that resolve when the
+ * corresponding command has been processed. Commands are processed one at a time and in the same order
+ * in which they were sent.
+ *
+ * There is a ready() function that returns a promise that resolves when all the commands sent
+ * before the ready() function have been processed. It is useful when a subclass of Radio() sends commands
+ * in the constructor, because then the ready() function will only resolve when all those commands
+ * have been processed.
+ */
 export class Radio<ParameterKey extends string = string> extends EventTarget {
   /** @param sampleReceiver the object that will receive the radio samples. */
   constructor(
@@ -95,14 +107,22 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   /** Current values of the properties. */
   private parameterValues: Map<ParameterKey, any>;
 
-  /** Starts playing the radio. */
-  start() {
-    this.channel.send({ type: "start" });
+  /**
+   * Starts playing the radio.
+   *
+   * @returns a promise that resolves after the command has been processed by the radio.
+   */
+  async start() {
+    return this.channel.send({ type: "start" });
   }
 
-  /** Stops playing the radio. */
-  stop() {
-    this.channel.send({ type: "stop" });
+  /**
+   * Stops playing the radio.
+   *
+   * @returns a promise that resolves after the command has been processed by the radio.
+   */
+  async stop() {
+    return this.channel.send({ type: "stop" });
   }
 
   /** Returns whether the radio is playing (or scanning). */
@@ -110,9 +130,13 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     return this.state != State.OFF;
   }
 
-  /** Tunes the radio to this frequency. */
-  setFrequency(freq: number) {
-    this.channel.send({ type: "frequency", value: freq });
+  /**
+   * Tunes the radio to this frequency.
+   *
+   * @returns a promise that resolves after the command has been processed by the radio.
+   */
+  async setFrequency(freq: number) {
+    return this.channel.send({ type: "frequency", value: freq });
   }
 
   /** Returns the tuned frequency. */
@@ -120,9 +144,13 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     return this.frequency;
   }
 
-  /** Changes the sample rate. This change only takes effect when the radio is started. */
-  setSampleRate(sampleRate: number) {
-    this.sampleRate = sampleRate;
+  /**
+   * Changes the sample rate. This change only takes effect when the radio is started.
+   *
+   * @returns a promise that resolves after the command has been processed by the radio.
+   */
+  async setSampleRate(sampleRate: number) {
+    return (this.sampleRate = sampleRate);
   }
 
   /** Returns the current sample rate. */
@@ -130,14 +158,29 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     return this.sampleRate;
   }
 
-  /** Sets the value of a parameter. */
-  setParameter<V>(parameter: ParameterKey, value: V) {
-    this.channel.send({ type: "parameter", name: parameter, value: value });
+  /**
+   * Sets the value of a parameter.
+   *
+   * @returns a promise that resolves after the command has been processed by the radio.
+   */
+  async setParameter<V>(parameter: ParameterKey, value: V) {
+    return this.channel.send({
+      type: "parameter",
+      name: parameter,
+      value: value,
+    });
   }
 
   /** Returns the value of a parameter. */
   getParameter(parameter: ParameterKey): any {
     return this.parameterValues.get(parameter);
+  }
+
+  /**
+   * Returns a promise that resolves when the radio has processed all commands send to it up to this point.
+   */
+  async ready() {
+    return this.channel.send({ type: "ready" });
   }
 
   /** Override this function to do something when a sample block is received. */
@@ -148,7 +191,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     let transfers: Transfers;
     let source: SignalSource;
     while (true) {
-      let msg = await this.channel.receive();
+      let { msg, ack } = await this.channel.receive();
       try {
         switch (this.state) {
           case State.OFF: {
@@ -202,6 +245,8 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
         }
       } catch (e) {
         this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      } finally {
+        ack();
       }
     }
   }
