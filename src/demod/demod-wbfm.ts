@@ -1,3 +1,4 @@
+// Copyright 2026 Jacobo Tarrio Barreiro. All rights reserved.
 // Copyright 2013 Google Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +32,12 @@ export type OptionsWBFM = {
    * This should be 75 for the US and South Korea, 50 everywhere else.
    */
   deemphasizerTc?: number;
+  /** Number of taps for the downsampler filter. Must be an odd number. 151 by default. */
+  downsamplerTaps?: number;
+  /** Number of taps for the RF filter. Must be an odd number. 151 by default. */
+  rfTaps?: number;
+  /** Number of taps for the audio filter. Must be an odd number. 41 by default. */
+  audioTaps?: number;
 };
 
 /** A demodulator for wideband FM signals. */
@@ -48,7 +55,7 @@ export class DemodWBFM implements Demod<ModeWBFM> {
     options?: OptionsWBFM
   ) {
     let interRate = Math.min(inRate, 336000);
-    this.stage1 = new DemodWBFMStage1(inRate, interRate, mode);
+    this.stage1 = new DemodWBFMStage1(inRate, interRate, mode, options);
     this.stage2 = new DemodWBFMStage2(interRate, outRate, mode, options);
   }
 
@@ -95,14 +102,26 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
    * @param inRate The sample rate of the input samples.
    * @param outRate The sample rate of the output audio.
    * @param mode The mode to use initially.
+   * @param options Options for the demodulator.
    */
-  constructor(inRate: number, private outRate: number, private mode: ModeWBFM) {
+  constructor(
+    inRate: number,
+    private outRate: number,
+    private mode: ModeWBFM,
+    options?: OptionsWBFM
+  ) {
     const maxF = 75000;
+    const downsamplerTaps = options?.downsamplerTaps || 151;
+    const rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
     if (inRate != outRate) {
-      this.downsampler = new ComplexDownsampler(inRate, outRate, 151);
+      this.downsampler = new ComplexDownsampler(
+        inRate,
+        outRate,
+        downsamplerTaps
+      );
     }
-    const kernel = makeLowPassKernel(outRate, maxF, 151);
+    const kernel = makeLowPassKernel(outRate, maxF, rfTaps);
     this.filterI = new FIRFilter(kernel);
     this.filterQ = new FIRFilter(kernel);
     this.demodulator = new FMDemodulator(maxF / outRate);
@@ -174,8 +193,9 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
     const deemphTc =
       (options?.deemphasizerTc === undefined ? 50 : options.deemphasizerTc) /
       1e6;
+    const audioTaps = options?.audioTaps || 41;
     const filterF = Math.min(15000, outRate / 2);
-    const kernel = makeLowPassKernel(inRate, filterF, 41, 1 / 0.9);
+    const kernel = makeLowPassKernel(inRate, filterF, audioTaps, 1 / 0.9);
     this.monoSampler = new RealDownsampler(inRate, outRate, kernel);
     this.stereoSampler = new RealDownsampler(inRate, outRate, kernel);
     this.stereoSeparator = new StereoSeparator(inRate, pilotF);

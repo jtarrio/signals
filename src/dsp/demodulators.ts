@@ -28,9 +28,9 @@ export enum Sideband {
 export class SSBDemodulator {
   /**
    * @param sideband The sideband to demodulate.
+   * @param kernelLen The length of the Hilbert filter kernel to use.
    */
-  constructor(sideband: Sideband) {
-    const kernelLen = 151;
+  constructor(sideband: Sideband, kernelLen: number) {
     let hilbert = makeHilbertKernel(kernelLen);
     this.filterDelay = new FIRFilter(hilbert);
     this.filterHilbert = new FIRFilter(hilbert);

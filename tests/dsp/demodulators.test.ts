@@ -35,7 +35,7 @@ import {
 import { FFT } from "../../src/dsp/fft.js";
 
 test("SSBDemodulator USB", () => {
-  let demod = new SSBDemodulator(Sideband.Upper);
+  let demod = new SSBDemodulator(Sideband.Upper, 151);
 
   const powerForFreq = (freq: number) => {
     let input = iqAdd(iqSineTone(4800, 48000, freq, 1));
@@ -52,7 +52,7 @@ test("SSBDemodulator USB", () => {
 });
 
 test("SSBDemodulator LSB", () => {
-  let demod = new SSBDemodulator(Sideband.Lower);
+  let demod = new SSBDemodulator(Sideband.Lower, 151);
 
   const powerForFreq = (freq: number) => {
     let input = iqAdd(iqSineTone(4800, 48000, freq, 1));
