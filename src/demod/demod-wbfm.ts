@@ -249,9 +249,11 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
     }
 
     this.leftDeemph.inPlace(audio);
+    let right = this.outPool.get(audio.length);
+    right.set(audio);
     return {
       left: audio,
-      right: new Float32Array(audio),
+      right,
       stereo: false,
       snr: 1,
     };

@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator } from "../dsp/demodulators.js";
 import { FIRFilter, FrequencyShifter } from "../dsp/filters.js";
@@ -53,6 +54,7 @@ export class DemodNBFM implements Demod<ModeNBFM> {
     this.filterI = new FIRFilter(kernel);
     this.filterQ = new FIRFilter(kernel);
     this.demodulator = new FMDemodulator(mode.maxF / outRate);
+    this.outPool = new Float32Pool(1);
   }
 
   private rfTaps: number;
@@ -61,6 +63,7 @@ export class DemodNBFM implements Demod<ModeNBFM> {
   private filterI: FIRFilter;
   private filterQ: FIRFilter;
   private demodulator: FMDemodulator;
+  private outPool: Float32Pool;
 
   getMode(): ModeNBFM {
     return this.mode;
@@ -93,9 +96,11 @@ export class DemodNBFM implements Demod<ModeNBFM> {
     this.filterQ.inPlace(Q);
     let signalPower = (getPower(I, Q) * this.outRate) / (this.mode.maxF * 2);
     this.demodulator.demodulate(I, Q, I);
+    let right = this.outPool.get(I.length);
+    right.set(I);
     return {
       left: I,
-      right: new Float32Array(I),
+      right,
       stereo: false,
       snr: signalPower / allPower,
     };

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { AGC, FIRFilter, FrequencyShifter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
@@ -60,6 +61,7 @@ export class DemodCW implements Demod<ModeCW> {
     this.toneShifter = new FrequencyShifter(outRate);
     this.toneFrequency = toneFrequency;
     this.agc = new AGC(outRate, 10);
+    this.outPool = new Float32Pool(1);
   }
 
   private audioTaps: number;
@@ -70,6 +72,7 @@ export class DemodCW implements Demod<ModeCW> {
   private toneShifter: FrequencyShifter;
   private toneFrequency: number;
   private agc: AGC;
+  private outPool: Float32Pool;
 
   getMode(): ModeCW {
     return this.mode;
@@ -100,9 +103,11 @@ export class DemodCW implements Demod<ModeCW> {
     let signalPower = (getPower(I, Q) * this.outRate) / this.mode.bandwidth;
     this.toneShifter.inPlace(I, Q, this.toneFrequency);
     this.agc.inPlace(I);
+    let right = this.outPool.get(I.length);
+    right.set(I);
     return {
       left: I,
-      right: new Float32Array(I),
+      right,
       stereo: false,
       snr: signalPower / allPower,
     };

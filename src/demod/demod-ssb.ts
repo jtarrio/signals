@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { Sideband, SSBDemodulator } from "../dsp/demodulators.js";
 import { FrequencyShifter, AGC, FIRFilter } from "../dsp/filters.js";
@@ -66,6 +67,7 @@ export class DemodSSB implements Demod<ModeSSB> {
       hilbertTaps
     );
     this.agc = new AGC(outRate, 3);
+    this.outPool = new Float32Pool(1);
   }
 
   private rfTaps: number;
@@ -74,6 +76,7 @@ export class DemodSSB implements Demod<ModeSSB> {
   private filter: FIRFilter;
   private demodulator: SSBDemodulator;
   private agc: AGC;
+  private outPool: Float32Pool;
 
   getMode(): ModeSSB {
     return this.mode;
@@ -112,9 +115,11 @@ export class DemodSSB implements Demod<ModeSSB> {
     let signalPower =
       (getPower(I, I) * this.outRate) / (this.mode.bandwidth * 2);
     this.agc.inPlace(I);
+    let right = this.outPool.get(I.length);
+    right.set(I);
     return {
       left: I,
-      right: new Float32Array(I),
+      right,
       stereo: false,
       snr: signalPower / allPower,
     };
