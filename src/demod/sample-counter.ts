@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { SampleBlock } from "../radio/sample_block.js";
 import { SampleReceiver } from "../radio/sample_receiver.js";
 
 /** A SampleReceiver that counts received samples to send a `sample-click` event periodically. */
@@ -42,8 +43,8 @@ export class SampleCounter extends EventTarget implements SampleReceiver {
     this.samplesPerClick = this.getSamplesPerClick();
   }
 
-  receiveSamples(I: Float32Array, Q: Float32Array): void {
-    this.countedSamples += I.length;
+  receiveSamples(block: SampleBlock): void {
+    this.countedSamples += block.I.length;
     if (
       this.samplesPerClick === undefined ||
       this.samplesPerClick > this.countedSamples

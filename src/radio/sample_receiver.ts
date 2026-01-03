@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { SampleBlock } from "./sample_block.js";
+
 /** Interface for classes that get samples from a Radio class. */
 export interface SampleReceiver {
   /** Sets the sample rate. */
   setSampleRate(sampleRate: number): void;
 
   /** Receives samples that should be demodulated. */
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number, data?: any): void;
+  receiveSamples(block: SampleBlock): void;
 }
 
 /** A "composite" sample receiver that executes its component receivers in sequence. */
@@ -50,9 +52,9 @@ export class CompositeReceiver implements SampleReceiver {
     }
   }
 
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number): void {
+  receiveSamples(block: SampleBlock): void {
     for (let receiver of this.receivers) {
-      receiver.receiveSamples(I, Q, frequency);
+      receiver.receiveSamples(block);
     }
   }
 }

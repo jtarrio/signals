@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import { Float32RingBuffer, IqPool } from "../dsp/buffers.js";
-import { SampleBlock, SignalSource } from "../radio/signal_source.js";
+import { SampleBlock } from "../radio/sample_block.js";
+import { SignalSource } from "../radio/signal_source.js";
 import { PendingReadRing } from "./read_ring.js";
 
 /**

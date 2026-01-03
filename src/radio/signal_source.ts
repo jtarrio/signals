@@ -12,23 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** A block of samples returned by SignalSource.readSamples() */
-export type SampleBlock = {
-  /**
-   * The I components of the samples.
-   * Each element of I matches a corresponding element of Q, and I and Q have the same lengths.
-   */
-  I: Float32Array;
-  /**
-   * The Q components of the samples.
-   * Each element of Q matches a corresponding element of I, and I and Q have the same lengths.
-   */
-  Q: Float32Array;
-  /** The center frequency the source listened on when these samples were captured. */
-  frequency: number;
-  /** Extra data. */
-  data?: any;
-};
+import { SampleBlock } from "./sample_block.js";
 
 /** Interface for a sample source. */
 export interface SignalSource<ParameterKey extends string = string> {

@@ -17,20 +17,25 @@ import { Spectrum } from "../../src/demod/spectrum";
 import { sum, tone } from "../../src/sources/generators";
 
 test("Spectrum", () => {
-    let sampleRate = 40960;
-    let len = 4096;
-    let gen = sum(tone(1230, 0.1), tone(-2340, 0.2), tone(3450, 0.3), tone(-4560, 0.4));
+  let sampleRate = 40960;
+  let len = 4096;
+  let gen = sum(
+    tone(1230, 0.1),
+    tone(-2340, 0.2),
+    tone(3450, 0.3),
+    tone(-4560, 0.4)
+  );
 
-    let I = new Float32Array(len);
-    let Q = new Float32Array(len);
-    gen(0, sampleRate, 0, I, Q);
-    let spectrum = new Spectrum(len);
-    spectrum.receiveSamples(I, Q, 0);
-    let s = new Float32Array(len);
-    spectrum.getSpectrum(s);
+  let I = new Float32Array(len);
+  let Q = new Float32Array(len);
+  gen(0, sampleRate, 0, I, Q);
+  let spectrum = new Spectrum(len);
+  spectrum.receiveSamples({ I, Q, frequency: 0 });
+  let s = new Float32Array(len);
+  spectrum.getSpectrum(s);
 
-    assert.approximately(s[123], -27.5, 0.1);
-    assert.approximately(s[len - 234], -21.5, 0.1);
-    assert.approximately(s[345], -18, 0.1);
-    assert.approximately(s[len - 456], -15.5, 0.1);
-})
+  assert.approximately(s[123], -27.5, 0.1);
+  assert.approximately(s[len - 234], -21.5, 0.1);
+  assert.approximately(s[345], -18, 0.1);
+  assert.approximately(s[len - 456], -15.5, 0.1);
+});

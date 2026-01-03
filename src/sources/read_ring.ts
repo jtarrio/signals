@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { RadioError, RadioErrorType } from "../errors.js";
-import { SampleBlock } from "../radio/signal_source.js";
+import { SampleBlock } from "../radio/sample_block.js";
 
 type ResolveFn = (block: SampleBlock) => void;
 type RejectFn = (reason?: any) => void;

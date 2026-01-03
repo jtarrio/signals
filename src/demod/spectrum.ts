@@ -17,6 +17,7 @@
 import { Float32RingBuffer } from "../dsp/buffers.js";
 import { makeBlackmanWindow } from "../dsp/coefficients.js";
 import { FFT } from "../dsp/fft.js";
+import { SampleBlock } from "../radio/sample_block.js";
 import { SampleReceiver } from "../radio/sample_receiver.js";
 
 /** A sample receiver that computes the received signal's spectrum. */
@@ -55,10 +56,10 @@ export class Spectrum implements SampleReceiver {
 
   setSampleRate(_: number): void {}
 
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number): void {
-    this.I.store(I);
-    this.Q.store(Q);
-    this.lastFrequency = frequency;
+  receiveSamples(block: SampleBlock): void {
+    this.I.store(block.I);
+    this.Q.store(block.Q);
+    this.lastFrequency = block.frequency;
     this.dirty = true;
   }
 

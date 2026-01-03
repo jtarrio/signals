@@ -15,6 +15,7 @@
 import { Demod, Mode, getDemod, getMode, modeParameters } from "./modes.js";
 import { Player } from "./player.js";
 import { AudioPlayer } from "../players/audioplayer.js";
+import { SampleBlock } from "../radio/sample_block.js";
 import { SampleReceiver } from "../radio/sample_receiver.js";
 
 type DemodulatorOptions = {
@@ -133,15 +134,15 @@ export class Demodulator extends EventTarget implements SampleReceiver {
   }
 
   /** Receives radio samples. */
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number): void {
-    if (this.expectingFrequency?.center === frequency) {
+  receiveSamples(block: SampleBlock): void {
+    if (this.expectingFrequency?.center === block.frequency) {
       this.frequencyOffset = this.expectingFrequency.offset;
       this.expectingFrequency = undefined;
     }
 
     let { left, right, stereo, snr } = this.demod.demodulate(
-      I,
-      Q,
+      block.I,
+      block.Q,
       this.frequencyOffset
     );
     this.squelchControl.applySquelch(this.mode, left, right, snr);
