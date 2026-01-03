@@ -13,23 +13,15 @@
 // limitations under the License.
 
 /**
- * State machine to orchestrate the sample source, the demodulation process,
- * and the sample receiver, as a "radio" that can be started and stopped.
+ * A class to orchestrate the sample source, the demodulation process,
+ * and the sample receiver, as a "radio" that can be started and stopped at will.
  */
 
 import { RadioError, RadioErrorType } from "../errors.js";
-import { Channel } from "./msgqueue.js";
 import { SampleBlock } from "./sample_block.js";
 import { SampleReceiver } from "./sample_receiver.js";
 import { SignalSource, SignalSourceProvider } from "./signal_source.js";
-
-/** A message sent to the state machine. */
-type Message<ParameterKey extends string> =
-  | { type: "start" }
-  | { type: "stop" }
-  | { type: "frequency"; value: number }
-  | { type: "parameter"; name: ParameterKey; value: any }
-  | { type: "ready" };
+import { SingleThread } from "./single_thread.js";
 
 /** The information in a 'radio' event. */
 export type RadioEventType =
@@ -88,9 +80,8 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     this.sampleRate = 1024000;
     this.state = State.OFF;
     this.frequency = 88500000;
-    this.channel = new Channel<Message<ParameterKey>>();
     this.parameterValues = new Map();
-    this.runLoop();
+    this.singleThread = new SingleThread();
   }
 
   /** Current sample rate. */
@@ -99,10 +90,14 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   private state: State;
   /** Currently tuned frequency. */
   private frequency: number;
-  /** Channel to send messages to the state machine. */
-  private channel: Channel<Message<ParameterKey>>;
   /** Current values of the properties. */
   private parameterValues: Map<ParameterKey, any>;
+  /** Single thread to execute async functions. */
+  private singleThread: SingleThread;
+  /** Handler for in-flight data transfers. */
+  private transfers?: Transfers;
+  /** Current signal source. */
+  private source?: SignalSource;
 
   /**
    * Starts playing the radio.
@@ -110,7 +105,30 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async start() {
-    return this.channel.send({ type: "start" });
+    return this.singleThread.run(async () => {
+      if (this.state != State.OFF) return;
+      try {
+        this.source = await this.sourceProvider.get();
+        this.sampleRate = await this.source.setSampleRate(this.sampleRate);
+        this.frequency = await this.source.setCenterFrequency(this.frequency);
+        for (let [name, value] of this.parameterValues.entries()) {
+          await this.source.setParameter(name, value);
+        }
+        await this.source.startReceiving();
+        this.transfers = new Transfers(
+          this.source,
+          this.sampleReceiver,
+          this,
+          this.sampleRate,
+          this.options
+        );
+        this.transfers.startStream();
+        this.state = State.PLAYING;
+        this.dispatchEvent(new RadioEvent({ type: "started" }));
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      }
+    });
   }
 
   /**
@@ -119,7 +137,17 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async stop() {
-    return this.channel.send({ type: "stop" });
+    return this.singleThread.run(async () => {
+      if (this.state != State.PLAYING) return;
+      try {
+        await this.transfers!.stopStream();
+        await this.source!.close();
+        this.state = State.OFF;
+        this.dispatchEvent(new RadioEvent({ type: "stopped" }));
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      }
+    });
   }
 
   /** Returns whether the radio is playing (or scanning). */
@@ -133,7 +161,17 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async setFrequency(freq: number) {
-    return this.channel.send({ type: "frequency", value: freq });
+    return this.singleThread.run(async () => {
+      if (this.state == State.OFF) {
+        this.frequency = freq;
+      } else if (this.frequency != freq) {
+        try {
+          this.frequency = await this.source!.setCenterFrequency(freq);
+        } catch (e) {
+          this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+        }
+      }
+    });
   }
 
   /** Returns the tuned frequency. */
@@ -147,7 +185,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async setSampleRate(sampleRate: number) {
-    return (this.sampleRate = sampleRate);
+    this.sampleRate = sampleRate;
   }
 
   /** Returns the current sample rate. */
@@ -161,10 +199,19 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async setParameter<V>(parameter: ParameterKey, value: V) {
-    return this.channel.send({
-      type: "parameter",
-      name: parameter,
-      value: value,
+    return this.singleThread.run(async () => {
+      if (this.state == State.OFF) {
+        this.parameterValues.set(parameter, value);
+      } else {
+        try {
+          this.parameterValues.set(
+            parameter,
+            await this.source!.setParameter(parameter, value)
+          );
+        } catch (e) {
+          this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+        }
+      }
     });
   }
 
@@ -173,80 +220,8 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     return this.parameterValues.get(parameter);
   }
 
-  /**
-   * Returns a promise that resolves when the radio has processed all commands send to it up to this point.
-   */
-  async ready() {
-    return this.channel.send({ type: "ready" });
-  }
-
   /** Override this function to do something when a sample block is received. */
   onReceiveSamples(block: SampleBlock) {}
-
-  /** Runs the state machine. */
-  private async runLoop() {
-    let transfers: Transfers;
-    let source: SignalSource;
-    while (true) {
-      let { msg, ack } = await this.channel.receive();
-      try {
-        switch (this.state) {
-          case State.OFF: {
-            if (msg.type == "frequency") this.frequency = msg.value;
-            if (msg.type == "parameter")
-              this.parameterValues.set(msg.name, msg.value);
-            if (msg.type != "start") continue;
-            source = await this.sourceProvider.get();
-            this.sampleRate = await source.setSampleRate(this.sampleRate);
-            this.frequency = await source.setCenterFrequency(this.frequency);
-            for (let [name, value] of this.parameterValues.entries()) {
-              await source.setParameter(name, value);
-            }
-            await source.startReceiving();
-            transfers = new Transfers(
-              source,
-              this.sampleReceiver,
-              this,
-              this.sampleRate,
-              this.options
-            );
-            transfers.startStream();
-            this.state = State.PLAYING;
-            this.dispatchEvent(new RadioEvent({ type: "started" }));
-            break;
-          }
-          case State.PLAYING: {
-            switch (msg.type) {
-              case "frequency":
-                if (this.frequency != msg.value) {
-                  this.frequency = await source!.setCenterFrequency(msg.value);
-                }
-                break;
-              case "parameter":
-                this.parameterValues.set(
-                  msg.name,
-                  await source!.setParameter(msg.name, msg.value)
-                );
-                break;
-              case "stop":
-                await transfers!.stopStream();
-                await source!.close();
-                this.state = State.OFF;
-                this.dispatchEvent(new RadioEvent({ type: "stopped" }));
-                break;
-              default:
-              // do nothing.
-            }
-            break;
-          }
-        }
-      } catch (e) {
-        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
-      } finally {
-        ack();
-      }
-    }
-  }
 
   addEventListener(
     type: "radio",

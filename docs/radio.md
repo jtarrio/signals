@@ -18,7 +18,11 @@ import { Radio } from "@jtarrio/signals/radio.js";
 
 ### Create a `Radio`
 
-The constructor for the [`Radio`](../src/radio/radio.ts) class takes two arguments: a [`SignalSourceProvider`](../src/radio/signal_source.ts) that returns the signal source to use, and a [`SampleReceiver`](../src/radio/sample_receiver.ts) that will get the sample stream.
+The constructor for the [`Radio`](../src/radio/radio.ts) class takes two mandatory arguments: a [`SignalSourceProvider`](../src/radio/signal_source.ts) that returns the signal source to use, and a [`SampleReceiver`](../src/radio/sample_receiver.ts) that will get the sample stream.
+
+The constructor can also take an `options` argument, which is an object with the following properties:
+
+- `buffersPerSecond`: the number of buffers to process per second. This number controls the processing latency (more buffers implies smaller latency) and may have an effect on CPU usage (more buffers implies smaller buffers and more overhead). The default value is 20.
 
 #### Example
 
@@ -29,8 +33,8 @@ import { RealTimeSource, SimpleProvider } from "@jtarrio/signals/radio.js";
 
 class MyReceiver {
   setSampleRate(sampleRate) {}
-  receiveSamples(I, Q, frequency) {
-    console.log("Received", I.length, "samples");
+  receiveSamples(block) {
+    console.log("Received", block.I.length, "samples");
   }
 }
 
@@ -41,13 +45,13 @@ let radio = new Radio(new SimpleProvider(source), receiver);
 
 ### Start and stop playing
 
-Use the [`Radio`](../src/radio/radio.ts) object's `start()` and `stop()` methods to start and stop the radio, respectively.
+Use the [`Radio`](../src/radio/radio.ts) object's `start()` and `stop()` async methods to start and stop the radio, respectively. Those methods return promises that resolve when the radio is playing or has finished playing, respecively.
 
 Use the `isPlaying()` method to get the current state.
 
-Note that the `start()` and `stop()` methods may return before the radio is started or stopped. Therefore, if you call `isPlaying()` right after `start()` or `stop()`, you will get the "wrong" result.
+Note that if you don't wait for the promises returned by `start()` and `stop()` before calling `isPlaying()`, you may get the "wrong" result.
 
-You can get notifications when the radio starts and stops playing; to do that, listen for the [`Radio`](../src/radio/radio.ts) event.
+You can also get notifications when the radio starts and stops playing; to do that, listen for the `radio` event.
 
 #### Example
 
@@ -60,7 +64,7 @@ function onRadio(e) {
 }
 
 // Start the radio
-radio.start();
+await radio.start();
 
 // Stop the radio after 5 seconds
 setTimeout(() => radio.stop(), 5000);
@@ -89,7 +93,7 @@ function onRadio(e) {
 
 The [`Radio`](../src/radio/radio.ts) object has multiple methods that let you change the radio parameters and also see their current values. You can call those methods whether the radio is currently playing or not.
 
-Also, note that the methods that set parameters may return before the radio starts using the new value of the parameter. However, their corresponding methods to get the value will always return the last value you set.
+The setter methods are async and return promises that resolve when the new value of the property takes effect. The getter methods always return the last value passed to the setter.
 
 #### Sample rate
 
@@ -100,7 +104,7 @@ Due to the Nyquist Theorem, the sample rate also determines the bandwidth of the
 You can change the sample rate with the `setSampleRate()` method.
 
 ```typescript
-radio.setSampleRate(1024000);
+await radio.setSampleRate(1024000);
 ```
 
 If the radio is playing when you call `setSampleRate()`, this change won't take effect until you stop and restart the radio.
@@ -118,7 +122,7 @@ You can change the frequency that the radio is tuned to. This frequency is the "
 You can change the frequency with the `setFrequency()` method.
 
 ```typescript
-radio.setFrequency(88.5 * 1e6);
+await radio.setFrequency(88.5 * 1e6);
 ```
 
 You can check the current frequency with the `getFrequency()` method.
@@ -136,7 +140,7 @@ Some signal sources have configurable parameters; their names and allowed values
 You can set the value of a parameter with the `setParameter()` method.
 
 ```typescript
-radio.setParameter("gain", 3);
+await radio.setParameter("gain", 3);
 ```
 
 You can get the value of a parameter (that you set previously) with the `getParameter()` method.
@@ -147,19 +151,16 @@ console.log("Gain:", radio.getParameter("gain"));
 
 ## The `SignalSource` interface
 
-When a [`Radio`](../src/radio/radio.ts) object is initialized, it receives a [`SignalSourceProvider`](../src/radio/signal_source.ts) object. Whenever the `play()` method is called, the [`Radio`](../src/radio/radio.ts) the provider's `get()` method to get a [`SignalSource`](../src/radio/signal_source.ts) object.
+When a [`Radio`](../src/radio/radio.ts) object is initialized, it receives a [`SignalSourceProvider`](../src/radio/signal_source.ts) object. Whenever the `play()` method is called, the [`Radio`](../src/radio/radio.ts) calls the provider's `get()` method to get a [`SignalSource`](../src/radio/signal_source.ts) object.
 
-Using a provider makes it easy to ensure that any initialization happens. For example, if you want to read signals from a file, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the file and return a [`SignalSource`](../src/radio/signal_source.ts) that returns the data from that file. As another example, if you want to receive signals from a websocket, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the connection and return a [`SignalSource`](../src/radio/signal_source.ts) that is ready to receive the signal data.
+Using a provider makes it easy to include configuration parameters or initialization code for the source. For example, if you want to read signals from a file, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the file and return a [`SignalSource`](../src/radio/signal_source.ts) that returns the data from that file. As another example, if you want to receive signals from a websocket, the [`SignalSourceProvider`](../src/radio/signal_source.ts) might open the connection and return a [`SignalSource`](../src/radio/signal_source.ts) that is ready to receive the signal data.
 
 ### Imports
 
 You don't need to import anything if you use JavaScript. If you use TypeScript, you should import the [`SignalSource`](../src/radio/signal_source.ts) and [`SignalSourceProvider`](../src/radio/signal_source.ts) types:
 
 ```typescript
-import {
-  SignalSource,
-  SignalSourceProvider,
-} from "@jtarrio/signals/radio.js";
+import { SignalSource, SignalSourceProvider } from "@jtarrio/signals/radio.js";
 ```
 
 ### Method `setSampleRate()`
@@ -207,7 +208,7 @@ It takes one parameter:
 
 - `length` (`number`): the number of samples to read.
 
-It returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/signal_source.ts) when the samples have been received.
+It returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/sample_block.ts) when the samples have been received.
 
 The [`Radio`](../src/radio/radio.ts) calls `readSamples()` several times in quick succession, and it expects the `Promises` returned by this method to be resolved in the same order as the calls.
 
@@ -219,11 +220,12 @@ It returns a `Promise` that resolves when the [`SignalSource`](../src/radio/sign
 
 ## The `SampleBlock` type
 
-The [`SignalSource`](../src/radio/signal_source.ts)'s `readSamples()` method returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/signal_source.ts). This [`SampleBlock`](../src/radio/signal_source.ts) is an object that contains the following properties:
+The [`SignalSource`](../src/radio/signal_source.ts)'s `readSamples()` method returns a `Promise` that resolves to a [`SampleBlock`](../src/radio/sample_block.ts). This [`SampleBlock`](../src/radio/sample_block.ts) is an object that contains the following properties:
 
 - `I` (`Float32Array`): the successive values of the samples' I components.
 - `Q` (`Float32Array`): the successive values of the samples' Q components.
 - `frequency` (`number`): the frequency that the signal source was tuned to when it received this block of samples.
+- `data` (`object`): an object with additional data returned by the source. This field is optional and its content is source-dependent.
 
 The arrays in the `I` and `Q` properties have the same number of elements, and each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample.
 
@@ -335,13 +337,7 @@ The `setSampleRate()` method is called by the [`Radio`](../src/radio/radio.ts) o
 
 ### Method `receiveSamples()`
 
-The `receiveSamples()` method is called by the [`Radio`](../src/radio/radio.ts) object whenever there is a new block of samples. It takes three parameters:
-
-- `I` (`Float32Array`): the successive values of the samples' I components.
-- `Q` (`Float32Array`): the successive values of the samples' Q components.
-- `frequency` (`number`): the frequency that the signal source was tuned to when it received this block of samples.
-
-The `I` and `Q` arrays have the same number of elements, and each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample.
+The `receiveSamples()` method is called by the [`Radio`](../src/radio/radio.ts) object whenever there is a new block of samples. It takes one parameter that contains a [`SampleBlock`](../src/radio/sample_block.ts).
 
 ### Example
 
@@ -353,7 +349,8 @@ class PowerLogger implements SampleReceiver {
     console.log("New sample rate:", sampleRate);
   }
 
-  receiveSamples(I: Float32Array, Q: Float32Array, frequency: number) {
+  receiveSamples(block: SampleBlock) {
+    const { I, Q, frequency } = block;
     if (this.frequency != frequency) {
       console.log("New frequency:", frequency);
       this.frequency = frequency;
@@ -437,8 +434,25 @@ The [`Demodulator`](../src/demod/empty-demodulator.ts)'s constructor can take an
 
 - `player`: an instance of the [`Player`](../src/demod/player.ts) interface which receives the samples generated by the demodulator. If not specified, an [`AudioPlayer`](../src/players/audioplayer.ts) instance will be used.
 - `modeOptions`: an object that contains options for different modes. This object uses a mode's name as the key, and the options for the mode as a value. The possible options are:
+  - `AM`:
+    - `downsamplerTaps`: The number of taps for the downsampler FIR filter. Must be odd. The default value is 151.
+    - `rfTaps`: The number of taps for the RF FIR filter. Must be odd. The default value is 151.
+  - `CW`:
+    - `toneFrequency`: The sidetone frequency for the zero-beat CW signal, in Hertz. The default value is 600.
+    - `downsamplerTaps`: The number of taps for the downsampler FIR filter. Must be odd. The default value is 151.
+    - `audioTaps`: The number of taps for the RF FIR filter. Must be odd. The default value is 351.
+  - `NBFM`:
+    - `downsamplerTaps`: The number of taps for the downsampler FIR filter. Must be odd. The default value is 151.
+    - `rfTaps`: The number of taps for the RF FIR filter. Must be odd. The default value is 151.
+  - `SSB`:
+    - `downsamplerTaps`: The number of taps for the downsampler FIR filter. Must be odd. The default value is 151.
+    - `rfTaps`: The number of taps for the RF FIR filter. Must be odd. The default value is 151.
+    - `hilbertTaps`: The number of taps for the Hilbert FIR filter. Must be odd. The default value is 151.
   - `WBFM`:
     - `deemphasizerTc`: The time constant for the deemphasizer, in microseconds. This should be 75 for the USA and South Korea, and 50 everywhere else. If not specified, 50 is used.
+    - `downsamplerTaps`: The number of taps for the downsampler FIR filter. Must be odd. The default value is 151.
+    - `rfTaps`: The number of taps for the RF FIR filter. Must be odd. The default value is 151.
+    - `audioTaps`: The number of taps for the audio FIR filter. Must be odd. The default value is 41.
 
 #### Example
 

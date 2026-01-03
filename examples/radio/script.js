@@ -36,13 +36,10 @@ async function main() {
   radio = new Radio(new SimpleProvider(source), demodulator);
 
   // Set the radio and demodulator parameters.
-  radio.setFrequency(88500000);
+  await radio.setFrequency(88500000);
   demodulator.setFrequencyOffset(0);
   demodulator.setVolume(1);
-  demodulator.setMode(getMode("AM"));
-
-  // Wait until all the radio commands have completed.
-  await radio.ready();
+  demodulator.setMode(getMode("WBFM"));
 
   // Receive radio and demodulator events.
   radio.addEventListener("radio", onRadio);
