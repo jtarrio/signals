@@ -16,9 +16,9 @@ npm install @jtarrio/signals
 
 ## How to use
 
-See [the `docs` directory](docs/README.md) for the documentation, or check out the following examples.
+See [the `docs` directory](docs/README.md) for the documentation, or check out the following example.
 
-### The Radio API (demodulate and play through the computer's speakers)
+### Demodulate and play through the computer's speakers
 
 This program generates an AM signal, demodulates it, and plays it through the computer's speakers.
 
@@ -47,7 +47,7 @@ document
   .addEventListener("click", () => radio.stop());
 ```
 
-You can also see a full example at [`examples/highlevel`](examples/highlevel/script.js).
+You can also see a full example at [`examples/radio`](examples/radio/script.js).
 
 ## Acknowledgements
 
