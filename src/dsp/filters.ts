@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Float32Pool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
 export interface Filter {
@@ -30,11 +31,13 @@ export class FIRFilter implements Filter {
   constructor(private coefs: Float32Array) {
     this.offset = this.coefs.length - 1;
     this.center = Math.floor(this.coefs.length / 2);
-    this.curSamples = new Float32Array(this.offset);
+    this.pool = new Float32Pool(2, 2 * this.offset);
+    this.curSamples = this.pool.get(this.offset);
   }
 
   private offset: number;
   private center: number;
+  private pool: Float32Pool;
   private curSamples: Float32Array;
 
   setCoefficients(coefs: Float32Array) {
@@ -42,7 +45,7 @@ export class FIRFilter implements Filter {
     this.coefs = coefs;
     this.offset = this.coefs.length - 1;
     this.center = Math.floor(this.coefs.length / 2);
-    this.curSamples = new Float32Array(this.offset);
+    this.curSamples = this.pool.get(this.offset);
     this.loadSamples(oldSamples);
   }
 
@@ -75,7 +78,7 @@ export class FIRFilter implements Filter {
   loadSamples(samples: Float32Array) {
     const len = samples.length + this.offset;
     if (this.curSamples.length != len) {
-      let newSamples = new Float32Array(len);
+      let newSamples = this.pool.get(len);
       newSamples.set(
         this.curSamples.subarray(this.curSamples.length - this.offset)
       );
