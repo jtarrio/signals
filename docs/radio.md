@@ -38,7 +38,7 @@ class MyReceiver {
   }
 }
 
-let source = new RealTimeSource(tone(10000000, 0.1));
+let source = new Generated(tone(10000000, 0.1));
 let receiver = new MyReceiver();
 let radio = new Radio(new SimpleProvider(source), receiver);
 ```
@@ -231,17 +231,65 @@ The arrays in the `I` and `Q` properties have the same number of elements, and e
 
 ## The `RealTimeSource` class
 
-Signals provides a [`RealTimeSource`](../src/sources/realtime.ts) class, which is a [`SignalSource`](../src/radio/signal_source.ts) implementation that calls a function at periodic intervals to generate samples in real time.
+Signals provides a [`RealTimeSource`](../src/sources/realtime.ts) class, which calls its `getSamples()` method to populate a small buffer from which it outputs samples at periodic intervals.
+
+You can use this source by extending it to override the `getSamples()` method. Alternatively, you can use the [`GeneratedSource`](../src/sources/generated.ts) class, which is described in the following section.
+
+The `getSamples()` method receives three parameters:
+
+- `firstSample` (`number`): the starting sample number for this block of samples. The first sample in the stream is number 0, and so on.
+- `I` (`Float32Array`): the array that will receive the values of the samples' I components.
+- `Q` (`Float32Array`): the array that will receive the values of the samples' Q components.
+
+The `I` and `Q` arrays have the same length, which is the number of samples to generate. Each element of `I`, together with the element of `Q` with the same index, forms one I/Q sample. `I` and `Q` do not come pre-initialized, so you must write a value for every sample.
+
+You can use the `centerFrequency` and `sampleRate` fields to help you populate the buffer.
+
+The following source returns a complex sinusoidal wave on 10 MHz.
 
 ```typescript
 import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
 
-let source = new RealTimeSource(mySignalGenerator);
+class SineWaveSource extends RealTimeSource {
+  constructor() {
+    super();
+  }
+
+  protected getSamples(
+    firstSample: number,
+    I: Float32Array,
+    Q: Float32Array
+  ): void {
+    // Calculate the effective frequency, as a fraction of the sample rate.
+    let f = (10000000 - this.centerFrequency) / this.sampleRate;
+    // If it goes beyond the bandwidth, return all zeros.
+    if (f >= 0.5 || f <= -0.5) {
+      I.fill(0);
+      Q.fill(0);
+      return;
+    }
+    for (let i = 0; i < I.length; ++i) {
+      const angle = 2 * Math.PI * f * (i + firstSample);
+      I[i] = Math.cos(angle);
+      Q[i] = Math.sin(angle);
+    }
+  }
+}
+```
+
+## The `GeneratedSource` class
+
+Signals provides a [`GeneratedSource`](../src/sources/generated.ts) class, which is a [`SignalSource`](../src/radio/signal_source.ts) implementation that calls a function at periodic intervals to generate samples in real time.
+
+```typescript
+import { GeneratedSource } from "@jtarrio/signals/sources/generated.js";
+
+let source = new GeneratedSource(mySignalGenerator);
 ```
 
 The generator function receives these five parameters:
 
-- `startSample` (`number`): the starting sample number for this block of samples. The first sample in the stream is number 0, and so on.
+- `firstSample` (`number`): the starting sample number for this block of samples. The first sample in the stream is number 0, and so on.
 - `sampleRate` (`number`): the [`RealTimeSource`](../src/sources/realtime.ts)'s sample rate.
 - `centerFrequency` (`number`): the [`RealTimeSource`](../src/sources/realtime.ts)'s current center frequency.
 - `I` (`Float32Array`): the array that will receive the values of the samples' I components.
@@ -252,7 +300,7 @@ The `I` and `Q` arrays have the same length, which is the number of samples to g
 The following generator function returns a complex sinusoidal wave on 10 Megahertz:
 
 ```typescript
-function mySignalGenerator(startSample, sampleRate, centerFrequency, I, Q) {
+function mySignalGenerator(firstSample, sampleRate, centerFrequency, I, Q) {
   // Calculate the effective frequency, as a fraction of the sample rate.
   let f = (10000000 - centerFrequency) / sampleRate;
   // If it goes beyond the bandwidth, return all zeros.
@@ -262,7 +310,7 @@ function mySignalGenerator(startSample, sampleRate, centerFrequency, I, Q) {
     return;
   }
   for (let i = 0; i < I.length; ++i) {
-    const angle = 2 * Math.PI * f * (i + startSample);
+    const angle = 2 * Math.PI * f * (i + firstSample);
     I[i] = Math.cos(angle);
     Q[i] = Math.sin(angle);
   }

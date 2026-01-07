@@ -14,7 +14,7 @@
 
 import { IqPool } from "../dsp/buffers.js";
 import { Preemphasis } from "../dsp/filters.js";
-import { SampleGenerator } from "./realtime.js";
+import { SampleGenerator } from "./generated.js";
 
 /** Returns a generator for a tone at the given frequency with the given amplitude. */
 export function tone(

@@ -27,7 +27,10 @@ export interface SignalSource<ParameterKey extends string = string> {
    * Returns the actual center frequency, which may differ.
    */
   setCenterFrequency(freq: number): Promise<number>;
-  /** Sets the value of a parameter. */
+  /**
+   * Sets the value of a parameter.
+   * Returns the actual value, or void if the parameter does not exist.
+   */
   setParameter<V>(parameter: ParameterKey, value: V): Promise<V | void>;
   /**
    * Prepares the source to start streaming samples.

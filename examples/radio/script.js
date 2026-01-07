@@ -14,7 +14,7 @@ import {
   wbfmSignal,
 } from "@jtarrio/signals/sources/generators.js";
 import { SimpleProvider } from "@jtarrio/signals/sources/provider.js";
-import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
+import { GeneratedSource } from "@jtarrio/signals/sources/generated.js";
 
 var elements = {};
 var demodulator;
@@ -22,7 +22,7 @@ var radio;
 var knownModes = {};
 
 async function main() {
-  let source = new RealTimeSource(
+  let source = new GeneratedSource(
     sum(
       modulateFM(88500000, 75000, 0.1, wbfmSignal(tone(600, 0.5))),
       modulateAM(810000, 0.1, tone(600, 0.5)),

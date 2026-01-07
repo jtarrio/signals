@@ -28,10 +28,10 @@ import { getMode } from "@jtarrio/signals/demod/modes.js";
 import { Radio } from "@jtarrio/signals/radio.js";
 import { modulateAM, tone } from "@jtarrio/signals/sources/generators.js";
 import { SimpleProvider } from "@jtarrio/signals/sources/provider.js";
-import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
+import { GeneratedSource } from "@jtarrio/signals/sources/generated.js";
 
 // Create the source, demodulator, and radio and connect them.
-let source = new RealTimeSource(modulateAM(810000, 0.1, tone(600, 0.5)));
+let source = new GeneratedSource(modulateAM(810000, 0.1, tone(600, 0.5)));
 let demodulator = new Demodulator();
 let radio = new Radio(new SimpleProvider(source), demodulator);
 

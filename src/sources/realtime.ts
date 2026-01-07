@@ -18,30 +18,14 @@ import { SignalSource } from "../radio/signal_source.js";
 import { PendingReadRing } from "./read_ring.js";
 
 /**
- * A function that generates samples.
- * @param startSample The first sample's number.
- * @param sampleRate The sample rate.
- * @param centerFrequency The signal's center frequency.
- * @param I An array to be populated with the I component values.
- * @param Q An array to be populated with the Q component values.
- */
-export type SampleGenerator = (
-  startSample: number,
-  sampleRate: number,
-  centerFrequency: number,
-  I: Float32Array,
-  Q: Float32Array
-) => void;
-
-/**
- * A SignalSource that gets samples from a SampleGenerator function in real time.
+ * A SignalSource that outputs samples in real time.
  *
- * This source holds a small buffer that it feeds by calling the generator
- * function. Then, at periodic intervals, it checks if there are any pending
- * reads and resolves them with the contents of the buffer.
+ * This source holds a small buffer that it feeds by calling the getSamples() method.
+ * Then, at periodic intervals, it checks if there are any pending reads and resolves
+ * them with the contents of the buffer, refilling it as needed.
  */
 export class RealTimeSource implements SignalSource {
-  constructor(private generator: SampleGenerator) {
+  constructor() {
     this.sampleRate = 1024000;
     this.centerFrequency = 0;
     this.I = new Float32RingBuffer(Math.max(65536, this.sampleRate / 10));
@@ -54,8 +38,11 @@ export class RealTimeSource implements SignalSource {
     this.firstTs = null;
   }
 
-  private sampleRate: number;
-  private centerFrequency: number;
+  /** The source's sample rate. */
+  protected sampleRate: number;
+  /** The source's center frequency. */
+  protected centerFrequency: number;
+  
   private I: Float32RingBuffer;
   private Q: Float32RingBuffer;
   private lastSampleInBuffer: number;
@@ -64,6 +51,13 @@ export class RealTimeSource implements SignalSource {
   private pendingReads: PendingReadRing;
   private running: boolean;
   private firstTs: number | null;
+
+  /**
+   * Fills the provided I and Q arrays with samples starting at the given firstSample number. */
+  protected getSamples(firstSample: number, I: Float32Array, Q: Float32Array) {
+    I.fill(0);
+    Q.fill(0);
+  }
 
   async setParameter<V>(_property: string, _value: V): Promise<void | V> {}
 
@@ -161,7 +155,7 @@ export class RealTimeSource implements SignalSource {
     if (fillCount == 0) return;
 
     let [I, Q] = this.inPool.get(fillCount);
-    this.generator(fillStart, this.sampleRate, this.centerFrequency, I, Q);
+    this.getSamples(fillStart, I, Q);
     this.I.store(I);
     this.Q.store(Q);
     this.lastSampleInBuffer = fillStart + fillCount;
