@@ -15,5 +15,6 @@ npm install @jtarrio/signals
 ## Using Signals
 
 - Demodulating and playing signals in real time through the [Radio API](radio.md)
-- Writing a [new modulation scheme](new-demod.md) for the Radio API
+- Writing a [new signal source](new-source.md)
+- Writing a [new modulation scheme](new-demod.md)
 - Using the [built-in DSP library](dsp.md)
