@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="demod_benchmark.js" type="module"></script>
+  </head>
+  <body>
+    <div class="top">
+      <label for="sampleRate">Sample rate: </label
+      ><input
+        type="number"
+        id="sampleRate"
+        min="250000"
+        max="3000000"
+        step="1"
+        value="1024000"
+      />
+      <label for="scheme">Modulation: </label>
+      <select id="scheme"></select>
+      <label for="bandwidth" id="lblBandwidth" hidden>Bandwidth: </label
+      ><input type="number" id="bandwidth" min="0" max="200000" step="1" />
+      <label for="stereo" id="lblStereo" hidden>Stereo: </label
+      ><input type="checkbox" id="stereo" hidden checked/>
+      <button id="run">Run!</button>
+      <span id="result" hidden></span>
+    </div>
+  </body>
+</html>
