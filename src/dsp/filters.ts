@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32Pool } from "./buffers.js";
+import { Float32Pool, IqPool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
 export interface Filter {
@@ -249,22 +249,17 @@ export interface IIRFilter extends Filter {
 
 /** IIR filter with two 'b' coefficients and one 'a' coefficient. */
 class IIRFilter21 implements IIRFilter {
-  constructor(
-    private sampleRate: number,
-    private b0: number,
-    private b1: number,
-    private a1: number
-  ) {
-    this.prev = 0;
-    this.val = 0;
+  constructor(private sampleRate: number, b0: number, b1: number, a1: number) {
+    this.q = [b0, b1, a1];
+    this.v = [0, 0];
   }
 
-  private prev: number;
-  private val: number;
+  private q: [number, number, number];
+  private v: [number, number];
 
   /** Returns a copy of this filter. */
   clone(): IIRFilter {
-    return new IIRFilter21(this.sampleRate, this.b0, this.b1, this.a1);
+    return new IIRFilter21(this.sampleRate, ...this.q);
   }
 
   getDelay(): number {
@@ -276,37 +271,156 @@ class IIRFilter21 implements IIRFilter {
    * @param samples The samples to filter.
    */
   inPlace(samples: Float32Array) {
-    let prev = this.prev;
-    let val = this.val;
+    let q = this.q;
+    let x1 = this.v[0];
+    let y1 = this.v[1];
     for (let i = 0; i < samples.length; ++i) {
-      val = this.b0 * samples[i] + this.b1 * prev + this.a1 * val;
-      prev = samples[i];
-      samples[i] = val;
+      const x0 = samples[i];
+      samples[i] = y1 = q[0] * x0 + q[1] * x1 + q[2] * y1;
+      x1 = x0;
     }
-    this.prev = prev;
-    this.val = val;
+    this.v[0] = x1;
+    this.v[1] = y1;
   }
 
   /** Filters an individual sample. */
   add(sample: number): number {
-    this.val = this.b0 * sample + this.b1 * this.prev + this.a1 * this.val;
-    this.prev = sample;
-    return this.val;
+    this.v[1] =
+      this.q[0] * sample + this.q[1] * this.v[0] + this.q[2] * this.v[1];
+    this.v[0] = sample;
+    return this.v[1];
   }
 
   /** Returns the value currently held by the filter. */
   get value() {
-    return this.val;
+    return this.v[1];
   }
 
   /** Returns the phase shift at the given angular frequency. */
   phaseShift(freq: number): number {
     const w = (2 * Math.PI * freq) / this.sampleRate;
     const real =
-      Math.cos(w) * (this.b1 - this.b0 * this.a1) + this.b0 - this.b1 * this.a1;
-    const imag = Math.sin(w) * (this.b1 + this.b0 * this.a1);
+      Math.cos(w) * (this.q[1] - this.q[0] * this.q[2]) +
+      this.q[0] -
+      this.q[1] * this.q[2];
+    const imag = Math.sin(w) * (this.q[1] + this.q[0] * this.q[2]);
     return atan2(imag, real);
   }
+}
+
+/** IIR filter with three 'b' coefficients and two 'a' coefficient. */
+class IIRFilter32 implements IIRFilter {
+  constructor(
+    private sampleRate: number,
+    b0: number,
+    b1: number,
+    b2: number,
+    a1: number,
+    a2: number
+  ) {
+    this.q = [b0, b1, b2, a1, a2];
+    this.v = [0, 0, 0, 0];
+  }
+
+  private q: [number, number, number, number, number];
+  private v: [number, number, number, number];
+
+  /** Returns a copy of this filter. */
+  clone(): IIRFilter {
+    return new IIRFilter32(this.sampleRate, ...this.q);
+  }
+
+  getDelay(): number {
+    return 0;
+  }
+
+  /**
+   * Filters the given samples in place.
+   * @param samples The samples to filter.
+   */
+  inPlace(samples: Float32Array) {
+    let q = this.q;
+    let x1 = this.v[0];
+    let x2 = this.v[1];
+    let y1 = this.v[2];
+    let y2 = this.v[3];
+    for (let i = 0; i < samples.length; ++i) {
+      let x0 = samples[i];
+      let y0 = (samples[i] =
+        q[0] * x0 + q[1] * x1 + q[2] * x2 + q[3] * y1 + q[4] * y2);
+      y2 = y1;
+      y1 = y0;
+      x2 = x1;
+      x1 = x0;
+    }
+    this.v[0] = x1;
+    this.v[1] = x2;
+    this.v[2] = y1;
+    this.v[3] = y2;
+  }
+
+  /** Filters an individual sample. */
+  add(sample: number): number {
+    // b0*x0+b1*x1+b2*x2+a1*y1+a2*y2
+    let y0 =
+      this.q[0] * sample +
+      this.q[1] * this.v[0] +
+      this.q[2] * this.v[1] +
+      this.q[3] * this.v[2] +
+      this.q[4] * this.v[3];
+    this.v[3] = this.v[2];
+    this.v[2] = y0;
+    this.v[1] = this.v[0];
+    this.v[0] = sample;
+    return y0;
+  }
+
+  /** Returns the value currently held by the filter. */
+  get value() {
+    return this.v[1];
+  }
+
+  /** Returns the phase shift at the given angular frequency. */
+  phaseShift(freq: number): number {
+    const w = (2 * Math.PI * freq) / this.sampleRate;
+    const real =
+      Math.cos(w) * (this.q[1] - this.q[0] * this.q[2]) +
+      this.q[0] -
+      this.q[1] * this.q[2];
+    const imag = Math.sin(w) * (this.q[1] + this.q[0] * this.q[2]);
+    return atan2(imag, real);
+  }
+}
+
+/** Returns the coefficients for a first-order low-pass IIR filter. */
+function lowPassCoeffs21(
+  sampleRate: number,
+  timeConstant: number
+): [number, number, number] {
+  const wd = 1 / (timeConstant * sampleRate);
+  const wa = 2 * sampleRate * Math.tan(wd / 2);
+  const tau = 1 / wa;
+  let a = 1 + 2 * tau * sampleRate;
+  let b = 1 - 2 * tau * sampleRate;
+
+  return [1 / a, 1 / a, -b / a];
+}
+
+/**
+ * Returns the coefficients for a second-order low-pass IIR filter.
+ * 
+ * From https://webaudio.github.io/Audio-EQ-Cookbook/Audio-EQ-Cookbook.txt
+ */
+function lowPassCoeffs32(sampleRate: number, frequency: number, Q: number): [number, number, number, number, number] {
+  let w = (2 * Math.PI * frequency) / sampleRate;
+  let alpha = Math.sin(w) / (2 * Q);
+  let b0 = (1 - Math.cos(w)) / 2;
+  let b1 = 1 - Math.cos(w);
+  let b2 = (1 - Math.cos(w)) / 2;;
+  let a0 = 1 + alpha;
+  let a1 = -2 * Math.cos(w);
+  let a2 = 1 - alpha;
+  return [b0 / a0, b1 / a0, b2 / a0, -a1 / a0, -a2 / a0];
 }
 
 /** A FM de-emphasis filter. */
@@ -316,13 +430,7 @@ export class Deemphasis extends IIRFilter21 {
    * @param timeConstant The filter's time constant, in seconds.
    */
   constructor(sampleRate: number, timeConstant: number) {
-    const wd = 1 / (timeConstant * sampleRate);
-    const wa = 2 * sampleRate * Math.tan(wd / 2);
-    const tau = 1 / wa;
-    let a = 1 + 2 * tau * sampleRate;
-    let b = 1 - 2 * tau * sampleRate;
-
-    super(sampleRate, 1 / a, 1 / a, -b / a);
+    super(sampleRate, ...lowPassCoeffs21(sampleRate, timeConstant));
   }
 }
 
@@ -346,75 +454,32 @@ export class Preemphasis extends IIRFilter21 {
   }
 }
 
-/** A single-pole IIR low-pass filter. */
-export class IIRLowPass extends Deemphasis {
+/** A first-order IIR low-pass filter. */
+export class IIRLowPass extends IIRFilter21 {
   /**
    * @param sampleRate The signal's sample rate.
    * @param freq The filter's corner frequency.
    */
   constructor(sampleRate: number, freq: number) {
-    super(sampleRate, frequencyToTimeConstant(freq));
-  }
-}
-
-class IIRFilterChain implements IIRFilter {
-  constructor(private filters: IIRFilter[]) {}
-
-  /** Returns a copy of this filter. */
-  clone(): IIRFilter {
-    return new IIRFilterChain(this.filters.map((f) => f.clone()));
-  }
-
-  getDelay(): number {
-    return 0;
-  }
-
-  /**
-   * Filters the given samples in place.
-   * @param samples The samples to filter.
-   */
-  inPlace(samples: Float32Array) {
-    for (let f of this.filters) {
-      f.inPlace(samples);
-    }
-  }
-
-  /** Filters an individual sample. */
-  add(sample: number): number {
-    for (let f of this.filters) {
-      sample = f.add(sample);
-    }
-    return sample;
-  }
-
-  /** Returns the value currently held by the filter. */
-  get value() {
-    return this.filters[this.filters.length - 1].value;
-  }
-
-  /** Returns the phase shift at the given frequency. */
-  phaseShift(freq: number): number {
-    let lag = 0;
-    for (let f of this.filters) {
-      lag += f.phaseShift(freq);
-    }
-    return ((lag + Math.PI) % (2 * Math.PI)) - Math.PI;
-  }
-}
-
-/** A chain of single-pole IIR low-pass filters. */
-export class IIRLowPassChain extends IIRFilterChain {
-  /**
-   * @param count Number of filters in the chain.
-   * @param sampleRate The signal's sample rate.
-   * @param freq The corner frequency for the whole chain.
-   */
-  constructor(count: number, sampleRate: number, freq: number) {
-    const cf = freq / Math.sqrt(Math.pow(2, 1 / count) - 1);
-    let filters = Array.from({ length: count }).map(
-      (_) => new IIRLowPass(sampleRate, cf)
+    super(
+      sampleRate,
+      ...lowPassCoeffs21(sampleRate, frequencyToTimeConstant(freq))
     );
-    super(filters);
+  }
+}
+
+/** A second-order IIR low-pass filter. */
+export class IIRLowPass2 extends IIRFilter32 {
+  /**
+   * @param sampleRate The signal's sample rate.
+   * @param freq The filter's corner frequency.
+   * @param Q The filter's Q factor.
+   */
+  constructor(sampleRate: number, freq: number, Q: number) {
+    super(
+      sampleRate,
+      ...lowPassCoeffs32(sampleRate, freq, Q)
+    );
   }
 }
 
@@ -448,117 +513,78 @@ export class FrequencyShifter {
   }
 }
 
-/** A phase-locked loop that can detect a signal with a given frequency. */
-export class PLL {
-  /**
-   * @param sampleRate The sample rate for the input signal.
-   * @param freq The frequency of the signal to detect, in Hz.
-   * @param tolerance The frequency tolerance for the signal, in Hz.
-   */
-  constructor(private sampleRate: number, freq: number, tolerance: number) {
-    this.phase = 0;
-    this.speed = (2 * Math.PI * freq) / sampleRate;
-    this.maxSpeedCorr = (2 * Math.PI * tolerance) / sampleRate;
-    this.speedCorrection = 0;
-    this.phaseCorrection = 0;
-    this.biFlt = new IIRLowPassChain(4, sampleRate, tolerance);
-    this.bqFlt = new IIRLowPassChain(4, sampleRate, tolerance);
-    this.siFlt = new IIRLowPassChain(4, sampleRate, 7);
-    this.sqFlt = new IIRLowPassChain(4, sampleRate, 7);
-    this.piFlt = new IIRLowPassChain(4, sampleRate, 250);
-    this.pqFlt = new IIRLowPassChain(4, sampleRate, 250);
-    this.lbI = 0;
-    this.lbQ = 0;
-    this.iMagFlt = new IIRLowPass(sampleRate, 7);
-    this.bMagFlt = new IIRLowPass(sampleRate, 7);
-    this.cos = 1;
-    this.sin = 0;
-    this.locked = true;
+/** Detects a pilot tone and returns its cosine and sine as an IQ signal. */
+export class PilotDetector {
+  constructor(
+    private sampleRate: number,
+    private targetFreq: number,
+    tolerance: number
+  ) {
+    this.iqPool = new IqPool(2);
+    this.downShifter = new FrequencyShifter(sampleRate);
+    this.upShifter = new FrequencyShifter(sampleRate);
+    this.filterI = new IIRLowPass2(sampleRate, tolerance * 100, 1);
+    this.filterQ = this.filterI.clone();
+    this.prev = [1, 0];
+    this.tolerance = (2 * Math.PI * tolerance) / sampleRate;
+    this.speedEstimate = 0;
+    this.speedDecay = decay(sampleRate, 0.25);
+    this.isLocked = false;
   }
 
-  private phase: number;
-  private speed: number;
-  private maxSpeedCorr: number;
-  private speedCorrection: number;
-  private phaseCorrection: number;
-  private biFlt: IIRFilter;
-  private bqFlt: IIRFilter;
-  private siFlt: IIRFilter;
-  private sqFlt: IIRFilter;
-  private piFlt: IIRFilter;
-  private pqFlt: IIRFilter;
-  private lbI: number;
-  private lbQ: number;
-  private iMagFlt: IIRFilter;
-  private bMagFlt: IIRFilter;
-  public cos: number;
-  public sin: number;
-  public locked: boolean;
+  private iqPool: IqPool;
+  private downShifter: FrequencyShifter;
+  private upShifter: FrequencyShifter;
+  private filterI: IIRFilter;
+  private filterQ: IIRFilter;
+  private prev: [number, number];
+  private tolerance: number;
+  private speedEstimate: number;
+  private speedDecay: number;
+  private isLocked: boolean;
 
-  add(sample: number): void {
-    let phase = this.phase;
-    // Generate outputs with last computed parameters
-    this.cos = Math.cos(phase);
-    this.sin = Math.sin(phase);
-
-    // Compute I+jQ, the difference between the input and our internal oscillator
-    this.lbI = this.biFlt.add(Math.cos(-phase) * sample);
-    this.lbQ = this.bqFlt.add(Math.sin(-phase) * sample);
-    this.phase += this.speed;
-
-    this.add = this.addRemaining;
+  get locked() {
+    return this.isLocked;
   }
 
-  addRemaining(sample: number) {
-    let phase = this.phase;
+  extract(input: Float32Array): [Float32Array, Float32Array] {
+    const speedDecay = this.speedDecay;
+    let lI = this.prev[0];
+    let lQ = this.prev[1];
+    let speedEstimate = this.speedEstimate;
 
-    // Generate outputs with last computed parameters
-    let angle = phase + this.speedCorrection + this.phaseCorrection;
-    this.cos = Math.cos(angle);
-    this.sin = Math.sin(angle);
+    let out = this.iqPool.get(input.length);
+    const I = out[0];
+    const Q = out[1];
+    I.set(input);
+    Q.fill(0);
 
-    // Compute (bI, bQ), the beat (difference) between the input and our reference oscillator
-    const rawI = Math.cos(-phase) * sample;
-    const rawQ = Math.sin(-phase) * sample;
-    const bI = this.biFlt.add(rawI);
-    const bQ = this.bqFlt.add(rawQ);
-    this.phase = this.phase + this.speed;
+    this.downShifter.inPlace(I, Q, -this.targetFreq);
+    this.filterI.inPlace(I);
+    this.filterQ.inPlace(Q);
 
-    // The beat is going to lag or advance wrt the input because of the input filter chain
+    for (let i = 0; i < I.length; ++i) {
+      const m = Math.hypot(I[i], Q[i]);
+      if (m > 0) {
+        I[i] /= m;
+        Q[i] /= m;
+        speedEstimate +=
+          speedDecay *
+          (atan2(Q[i] * lI - I[i] * lQ, I[i] * lI + Q[i] * lQ) - speedEstimate);
+      } else {
+        speedEstimate += speedDecay * (2 * this.tolerance - speedEstimate);
+      }
+      lI = I[i];
+      lQ = Q[i];
+    }
+    this.upShifter.inPlace(I, Q, this.targetFreq);
 
-    // Compute (sI, sQ), the average phase speed of (bI, bQ). That's the difference in frequency.
-    // rs = b * conj(lb)
-    const rsI = this.lbI * bI + this.lbQ * bQ;
-    const rsQ = this.lbI * bQ - bI * this.lbQ;
-    const sI = this.siFlt.add(rsI);
-    const sQ = this.sqFlt.add(rsQ);
-    this.lbI = bI;
-    this.lbQ = bQ;
-    const beatSpeed = atan2(sQ, sI);
-    const speedCorr = Math.max(
-      -this.maxSpeedCorr,
-      Math.min(beatSpeed, this.maxSpeedCorr)
-    );
-    this.speedCorrection += speedCorr;
+    this.prev[0] = lI;
+    this.prev[1] = lQ;
+    this.speedEstimate = speedEstimate;
 
-    // Compute (dI, dQ), the difference between the beat (bI, bQ) and our speed correction (cI, cQ)
-    // That's the difference in phase.
-    const cI = Math.cos(this.speedCorrection);
-    const cQ = Math.sin(this.speedCorrection);
-    // rd = b * conj(c)
-    const rdI = bI * cI + bQ * cQ;
-    const rdQ = cI * bQ - bI * cQ;
-    const dI = this.piFlt.add(rdI);
-    const dQ = this.pqFlt.add(rdQ);
-    // But the biFlt/bqFlt are going to shift the phase of (bI, bQ), so compensate for that.
-    const freqCorrectionHz = (speedCorr * this.sampleRate) / (2 * Math.PI);
-    const shift = this.biFlt.phaseShift(freqCorrectionHz);
-    const phaseDiff = atan2(dQ, dI) + shift;
-    this.phaseCorrection = phaseDiff;
-
-    // Check if we are locked
-    let mag = this.iMagFlt.add(Math.abs(sample));
-    let bimag = this.bMagFlt.add(Math.hypot(bI, bQ) * 2);
-    this.locked = bimag > mag / 15;
+    this.isLocked =
+      speedEstimate >= -this.tolerance && speedEstimate <= this.tolerance;
+    return out;
   }
 }

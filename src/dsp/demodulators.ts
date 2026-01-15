@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { makeHilbertKernel } from "./coefficients.js";
-import { decay, FIRFilter, PLL } from "./filters.js";
+import { decay, FIRFilter, PilotDetector } from "./filters.js";
 import { Float32Pool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
@@ -134,11 +134,11 @@ export class StereoSeparator {
    */
   constructor(sampleRate: number, pilotFreq: number) {
     this.pool = new Float32Pool(4);
-    this.pll = new PLL(sampleRate, pilotFreq, 10);
+    this.detector = new PilotDetector(sampleRate, pilotFreq, 2);
   }
 
   private pool: Float32Pool;
-  private pll: PLL;
+  private detector: PilotDetector;
 
   /**
    * Locks on to the pilot tone and uses it to demodulate the stereo audio.
@@ -150,14 +150,16 @@ export class StereoSeparator {
    */
   separate(samples: Float32Array): { found: boolean; diff: Float32Array } {
     let out = this.pool.get(samples.length);
+    const pilot = this.detector.extract(samples);
+    const I = pilot[0];
+    const Q = pilot[1];
     for (let i = 0; i < samples.length; ++i) {
-      this.pll.add(samples[i]);
       // Multiply by 4 instead of 2 so 'out' has the same level as the input samples.
-      out[i] = samples[i] * this.pll.sin * this.pll.cos * 4;
+      out[i] = samples[i] * I[i] * Q[i] * 4;
     }
 
     return {
-      found: this.pll.locked,
+      found: this.detector.locked,
       diff: out,
     };
   }

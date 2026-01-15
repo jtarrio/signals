@@ -160,8 +160,8 @@ for (let i = 0; i < out.length; ++i) {
 
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains several classes that implement IIR filters:
 
-* `IIRLowPass` implements a 1-pole low-pass filter with a given corner frequency. As usual, the corner frequency has a -3dB response, and -20dB per decade afterwards.
-* `IIRLowPassChain` implements a chain of identical 1-pole low-pass filters that collectively have the given corner frequency. The corner frequency has a -3dB response, and afterwards, -20dB multiplied by the number of filters in the chain.
+* `IIRLowPass` implements a 1-pole low-pass filter with a given corner frequency. The corner frequency has a -3dB response and rolls off at -6dB per octave and -20dB per decade.
+* `IIRLowPass2` implements a 2-pole low-pass filter with a given corner frequency and Q factor. The corner frequency's response depends on the Q factor, but then it rolls off at -12dB per octave and -40dB per decade.
 * `Deemphasis` implements a 1-pole de-emphasis filter for FM demodulation with a given time constant (given in seconds.)
 * `Preemphasis` implements a 1-pole pre-emphasis filter for FM modulation with a given time constant (given in seconds.)
 
@@ -190,26 +190,24 @@ for (let i = 0; i < samples.length; ++i) {
 
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains a `DCBlocker` class to adaptively remove a signal at frequency 0.
 
-### Phase-locked loop
+### Pilot tone detector
 
-The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `PLL` class that implements a phase-locked loop that can follow a real sinusoidal wave of a specified frequency with a specified tolerance. This implementation is optimized to follow a steady 19,000 Hz tone, but it should be usable for any frequency.
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `PilotDetector` class that detects a pilot tone at a given frequency with a specified tolerance. This implementation is optimized to follow a steady 19,000 Hz tone, but it should be usable for any frequency.
 
 ```typescript
-import { PLL } from "@jtarrio/signals/dsp/filters.js";
+import { PilotDetector } from "@jtarrio/signals/dsp/filters.js";
 
 const sampleRate = 336000;
-let pll = new PLL(sampleRate, 19000, 10);
+let detector = new PilotDetector(sampleRate, 19000, 2);
 
 let samples: Float32Array = getSomeSamplesWithA19000HertzTone();
-let outputCos = new Float32Array(samples.length);
-for (let i = 0; i < samples.length; ++i) {
-  pll.add(samples[i]);
-  outputCos[i] = pll.cos;
-}
-// Now outputCos contains a sinusoidal wave that's synchronized
-// to a 19000 Hertz tone that is present in the input.
-// You can use pll.sin if you need a -90-degree phase shifted sinusoidal.
-// You can use pll.locked to know if the PLL is locked onto a tone.
+let output = detector.extract(samples);
+const outputI = output[0];
+const outputQ = output[1];
+// Now outputI and outputQ contain IQ samples that follow the
+// 19000 Hertz tone that is present in the input.
+// outputI is synchronized with the tone, outputQ is shifted -90 degrees.
+// You can use detector.locked to know if the detector is locked onto a tone.
 ```
 
 ## Frequency shifter

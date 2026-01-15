@@ -28,7 +28,7 @@ import {
   tone,
   wbfmSignal,
 } from "../../src/sources/generators.js";
-import { SampleGenerator } from "../../src/sources/realtime.js";
+import { SampleGenerator } from "../../src/sources/generated.js";
 
 describe("DemodWBFM", () => {
   registerDemod("WBFM", DemodWBFM, ConfigWBFM);
@@ -69,7 +69,8 @@ describe("DemodWBFM", () => {
         0.1,
         wbfmSignal(signal, 50)
       );
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
+      if (noiseAmpl !== undefined)
+        modulated = sum(modulated, noise(noiseAmpl, prng()));
       let I = new Float32Array(inLen);
       let Q = new Float32Array(inLen);
       modulated(0, inSampleRate, 0, I, Q);
@@ -142,7 +143,8 @@ describe("DemodWBFM", () => {
         0.1,
         wbfmSignal(left, right, 50)
       );
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
+      if (noiseAmpl !== undefined)
+        modulated = sum(modulated, noise(noiseAmpl, prng()));
       let I = new Float32Array(inLen);
       let Q = new Float32Array(inLen);
       modulated(0, inSampleRate, 0, I, Q);

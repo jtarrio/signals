@@ -45,31 +45,24 @@
         <select id="filterType">
           <option value="firlowpass" selected>FIR Low pass</option>
           <option value="iirlowpass">IIR Low pass</option>
-          <option value="iirlowpasschain">IIR Low pass chain</option>
+          <option value="iirlowpass2">IIR Low pass (2nd order)</option>
           <option value="hilbert">Hilbert</option>
-          <option value="deemphasizer">Deemphasizer</option>
+          <option value="preemphasis">Pre-emphasis</option>
+          <option value="deemphasis">De-emphasis</option>
+          <option value="predeemphasis">Pre-emphasis + De-emphasis</option>
           <option value="dcblocker">DC blocker</option>
         </select>
-        Sample rate: <input type="number" id="sampleRate" value="1024000" />
-        <span id="ctrFirLowPass"
-          >Bandwidth:
-          <input type="number" id="firBandwidth" min="0" value="20000" /> Taps:
-          <input type="number" id="lpTaps" value="151"
-        /></span>
-        <span id="ctrIirLowPass" hidden
-          >Bandwidth:
-          <input type="number" id="iirBandwidth" min="0" value="20000"
-        /></span>
-        <span id="ctrIirLowPassChain" hidden
-          >Bandwidth:
-          <input type="number" id="iirChainBandwidth" min="0" value="20000" />
-          Filters: <input type="number" id="chainCount" value="5"
-        /></span>
-        <span id="ctrHilbert" hidden
-          >Taps: <input type="number" id="hilTaps" value="351"
-        /></span>
-        <span id="ctrDeemphasizer" hidden
-          >Time constant:
+        Sample rate:
+        <input type="number" id="sampleRate" value="1024000" /></span
+        ><span class="ctr ctr-firlowpass ctr-iirlowpass ctr-iirlowpass2">
+          Bandwidth:
+          <input type="number" id="bandwidth" min="0" value="20000" /></span
+        ><span class="ctr ctr-iirlowpass2">
+          Q: <input type="number" id="qfactor" value="1" /></span
+        ><span class="ctr ctr-firlowpass ctr-hilbert">
+          Taps: <input type="number" id="taps" value="151" /></span
+        ><span class="ctr ctr-deemphasis ctr-preemphasis ctr-predeemphasis" hidden>
+          Time constant:
           <input
             type="number"
             id="timeConstant"

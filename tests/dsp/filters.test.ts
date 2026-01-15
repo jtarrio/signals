@@ -33,8 +33,8 @@ import {
   FIRFilter,
   FrequencyShifter,
   IIRLowPass,
-  IIRLowPassChain,
-  PLL,
+  IIRLowPass2,
+  PilotDetector,
   Preemphasis,
 } from "../../src/dsp/filters.js";
 
@@ -200,37 +200,33 @@ test("IIRLowPass", () => {
   }
 });
 
-test("IIRLowPassChain", () => {
+test("IIRLowPass2", () => {
   const sampleRate = 192000;
   let cornerFreq = 5000;
 
-  for (let count = 1; count < 5; ++count) {
-    const filterPower = (freq: number) => {
-      let filter = new IIRLowPassChain(count, sampleRate, cornerFreq);
-      let tone = sineTone(sampleRate, sampleRate, freq, 1);
-      filter.inPlace(tone);
-      return power(tone.subarray(sampleRate * 0.75));
-    };
+  const filterPower = (freq: number) => {
+    let filter = new IIRLowPass2(sampleRate, cornerFreq, 0.5);
+    let tone = sineTone(sampleRate, sampleRate, freq, 1);
+    filter.inPlace(tone);
+    return power(tone.subarray(sampleRate * 0.75));
+  };
 
-    const expectedPower = (freq: number) => {
-      let timeConstant =
-        Math.sqrt(Math.pow(2, 1 / count) - 1) / (2 * Math.PI * cornerFreq);
-      let xr = Math.sqrt(timeConstant);
-      let xc = 1 / (2 * Math.PI * freq * xr);
-      let o = xc / Math.hypot(xr, xc);
-      return Math.pow(o * o, count) / 2;
-    };
+  const maxExpectedPower = (freq: number) => {
+    let timeConstant = Math.sqrt(Math.sqrt(2) - 1) / (2 * Math.PI * cornerFreq);
+    let xr = Math.sqrt(timeConstant);
+    let xc = 1 / (2 * Math.PI * freq * xr);
+    let o = xc / Math.hypot(xr, xc);
+    return Math.pow(o * o, 2) / 2;
+  };
 
-    assert.approximately(filterPower(cornerFreq), 0.25, 0.005);
+  assert.approximately(filterPower(cornerFreq), 0.125, 0.005);
 
-    for (let i = 300; i < 19000; i += 1000) {
-      assert.approximately(
-        filterPower(i),
-        expectedPower(i),
-        0.005,
-        `Mismatch in frequency response for ${i} Hz with count ${count}`
-      );
-    }
+  for (let i = 300; i < 19000; i += 1000) {
+    assert.isAtMost(
+      filterPower(i),
+      maxExpectedPower(i),
+      `Mismatch in frequency response for ${i} Hz`
+    );
   }
 });
 
@@ -304,36 +300,27 @@ test("FrequencyShifter", () => {
   assert.isAtMost(iqRmsd(input, expected), 0.0005);
 });
 
-describe("PLL", () => {
-  const sampleRate = 48000;
+describe("PilotDetector", () => {
+  const sampleRate = 192000;
   const len = sampleRate / 2;
 
   // Freq, amplitude, phase, noise, expectedRMSD
   const lockedCases = [
-    [19000, 1, 0, 0, 1e-7],
-    [19002, 1, 0, 0, 2e-4],
-    [18998, 1, 0, 0, 2e-4],
-    [19000, 1, Math.PI / 2, 0, 1e-7],
-    [19002, 1, Math.PI / 2, 0, 2e-4],
-    [18998, 1, Math.PI / 2, 0, 2e-4],
-    [19000, 1, Math.PI - 0.01, 0, 1e-7],
-    [19002, 1, Math.PI - 0.01, 0, 2e-4],
-    [18998, 1, Math.PI - 0.01, 0, 2e-4],
-    [19000, 0.5, 0, 0.1, 1e-3],
-    [19002, 0.5, 0, 0.1, 1e-3],
-    [18998, 0.5, 0, 0.1, 1e-3],
-    [19000, 0.5, Math.PI / 2, 0.1, 1e-3],
-    [19002, 0.5, Math.PI / 2, 0.1, 1e-3],
-    [18998, 0.5, Math.PI / 2, 0.1, 1e-3],
-    [19000, 0.2, 0, 0.1, 1e-3],
-    [19002, 0.2, 0, 0.1, 1e-3],
-    [18998, 0.2, 0, 0.1, 1e-3],
-    [19000, 0.2, Math.PI / 2, 0.1, 1e-3],
-    [19002, 0.2, Math.PI / 2, 0.1, 1e-3],
-    [18998, 0.2, Math.PI / 2, 0.1, 1e-3],
-    [19000, 0.1, Math.PI / 2, 0.9, 7e-3],
-    [19002, 0.1, Math.PI / 2, 0.9, 7e-3],
-    [18998, 0.1, Math.PI / 2, 0.9, 7e-3],
+    [19000, 0.1, 0, 0, 1.1e-6],
+    [19002, 0.1, 0, 0, 7.1e-4],
+    [18998, 0.1, 0, 0, 7.1e-4],
+    [19000, 0.1, Math.PI / 2, 0, 1.1e-6],
+    [19002, 0.1, Math.PI / 2, 0, 7.1e-4],
+    [18998, 0.1, Math.PI / 2, 0, 7.1e-4],
+    [19000, 0.1, Math.PI - 0.01, 0, 1.1e-6],
+    [19002, 0.1, Math.PI - 0.01, 0, 7.1e-4],
+    [18998, 0.1, Math.PI - 0.01, 0, 7.1e-4],
+    [19000, 0.08, 0, 0.1, 2.2e-3],
+    [19002, 0.08, 0, 0.1, 2.4e-3],
+    [18998, 0.08, 0, 0.1, 2.4e-3],
+    [19000, 0.08, Math.PI / 2, 0.1, 2.1e-3],
+    [19002, 0.08, Math.PI / 2, 0.1, 2e-3],
+    [18998, 0.08, Math.PI / 2, 0.1, 2.4e-3],
   ];
 
   for (const [
@@ -347,16 +334,15 @@ describe("PLL", () => {
       let tone = sineTone(len, sampleRate, toneFreq, toneAmpl, tonePhase);
       let input = add(noise(len, noiseAmpl), tone);
 
-      let pll = new PLL(sampleRate, 19000, 10);
-      let output = new Float32Array(input.length);
-      for (let i = 0; i < output.length; ++i) {
-        pll.add(input[i]);
-        output[i] = pll.cos * toneAmpl;
+      let detector = new PilotDetector(sampleRate, 19000, 2);
+      let output = detector.extract(input);
+      for (let i = 0; i < output[0].length; ++i) {
+        output[0][i] *= toneAmpl;
       }
 
-      assert.isTrue(pll.locked);
+      assert.isTrue(detector.locked);
       assert.isAtMost(
-        rmsd(tone.subarray(len - 5000), output.subarray(len - 5000)),
+        rmsd(tone.subarray(len - 5000), output[0].subarray(len - 5000)),
         expected
       );
     });
@@ -383,20 +369,14 @@ describe("PLL", () => {
     test(`No lock for ${freq}Hz ampl=${ampl} noise=${noiseAmpl}`, () => {
       let tone = sineTone(len, sampleRate, freq, ampl);
       let input = add(noise(len, noiseAmpl), tone);
-      let pll = new PLL(sampleRate, 19000, 10);
-      let output = new Float32Array(input.length);
-      let noLockFor = 0;
-      for (let i = 0; i < output.length; ++i) {
-        pll.add(input[i]);
-        output[i] = pll.cos * (ampl === undefined ? 1 : ampl);
-        if (pll.locked) {
-          noLockFor = 0;
-        } else {
-          noLockFor++;
-        }
+
+      let detector = new PilotDetector(sampleRate, 19000, 2);
+      let output = detector.extract(input);
+      for (let i = 0; i < output[0].length; ++i) {
+        output[0][i] *= ampl;
       }
 
-      assert.isAtLeast(noLockFor, len * 0.75);
+      assert.isFalse(detector.locked);
     });
   }
 });

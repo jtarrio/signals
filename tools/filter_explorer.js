@@ -21,21 +21,11 @@ import { FFT } from "../dist/dsp/fft.js";
 function getControls() {
   return {
     filterType: document.getElementById("filterType"),
-    ctr: {
-      firlowpass: document.getElementById("ctrFirLowPass"),
-      iirlowpass: document.getElementById("ctrIirLowPass"),
-      iirlowpasschain: document.getElementById("ctrIirLowPassChain"),
-      hilbert: document.getElementById("ctrHilbert"),
-      deemphasizer: document.getElementById("ctrDeemphasizer"),
-    },
     input: {
       sampleRate: document.getElementById("sampleRate"),
-      firBandwidth: document.getElementById("firBandwidth"),
-      lpTaps: document.getElementById("lpTaps"),
-      iirBandwidth: document.getElementById("iirBandwidth"),
-      iirChainBandwidth: document.getElementById("iirChainBandwidth"),
-      chainCount: document.getElementById("chainCount"),
-      hilTaps: document.getElementById("hilTaps"),
+      bandwidth: document.getElementById("bandwidth"),
+      qfactor: document.getElementById("qfactor"),
+      taps: document.getElementById("taps"),
       timeConstant: document.getElementById("timeConstant"),
     },
     filterParams: document.getElementById("filterParams"),
@@ -57,9 +47,11 @@ function attachEvents(controls) {
 }
 
 function updateVisibleControls(controls) {
-  for (const c of Object.keys(controls.ctr)) {
-    controls.ctr[c].hidden = controls.filterType.value != c;
-  }
+  for (const c of document.getElementsByClassName("ctr")) c.hidden = true;
+  for (const c of document.getElementsByClassName(
+    `ctr-${controls.filterType.value}`
+  ))
+    c.hidden = false;
 }
 
 function getFilter(controls) {
@@ -70,8 +62,8 @@ function getFilter(controls) {
         new Filters.FIRFilter(
           Coefficients.makeLowPassKernel(
             sampleRate,
-            Number(controls.input.firBandwidth.value) / 2,
-            Number(controls.input.lpTaps.value)
+            Number(controls.input.bandwidth.value) / 2,
+            Number(controls.input.taps.value)
           )
         )
       );
@@ -79,26 +71,40 @@ function getFilter(controls) {
       return new FilterAdapter(
         new Filters.IIRLowPass(
           sampleRate,
-          Number(controls.input.iirBandwidth.value) / 2
+          Number(controls.input.bandwidth.value) / 2
         )
       );
-    case "iirlowpasschain":
+    case "iirlowpass2":
       return new FilterAdapter(
-        new Filters.IIRLowPassChain(
-          Number(controls.input.chainCount.value),
+        new Filters.IIRLowPass2(
           sampleRate,
-          Number(controls.input.iirChainBandwidth.value) / 2
+          Number(controls.input.bandwidth.value) / 2,
+          Number(controls.input.qfactor.value)
         )
       );
     case "hilbert":
       return new FilterAdapter(
         new Filters.FIRFilter(
-          Coefficients.makeHilbertKernel(Number(controls.input.hilTaps.value))
+          Coefficients.makeHilbertKernel(Number(controls.input.taps.value))
         )
       );
-    case "deemphasizer":
+    case "preemphasis":
+      return new FilterAdapter(
+        new Filters.Preemphasis(
+          sampleRate,
+          Number(controls.input.timeConstant.value) / 1e6
+        )
+      );
+    case "deemphasis":
       return new FilterAdapter(
         new Filters.Deemphasis(
+          sampleRate,
+          Number(controls.input.timeConstant.value) / 1e6
+        )
+      );
+    case "predeemphasis":
+      return new FilterAdapter(
+        new PreDeemphasis(
           sampleRate,
           Number(controls.input.timeConstant.value) / 1e6
         )
@@ -364,6 +370,32 @@ class FilterAdapter {
     }
     let output = transformer.transform(impulseR, impulseI);
     return output;
+  }
+}
+
+class PreDeemphasis {
+  constructor(sampleRate, timeConstant) {
+    this.pre = new Filters.Preemphasis(sampleRate, timeConstant);
+    this.de = new Filters.Deemphasis(sampleRate, timeConstant);
+  }
+
+  pre;
+  de;
+
+  clone() {
+    let out = new PreDeemphasis(48000, 50);
+    out.pre = this.pre.clone();
+    out.de = this.de.clone();
+    return out;
+  }
+
+  inPlace(samples) {
+    this.pre.inPlace(samples);
+    this.de.inPlace(samples);
+  }
+
+  getDelay() {
+    return this.pre.getDelay() + this.de.getDelay();
   }
 }
 
