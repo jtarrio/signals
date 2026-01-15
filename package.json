@@ -1,7 +1,7 @@
 {
   "name": "@jtarrio/signals",
   "description": "Demodulate radio signals in your JavaScript or TypeScript application",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "author": "Jacobo Tarrio <jtarrio@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
