@@ -14,8 +14,11 @@
 
 import { test, assert } from "vitest";
 import { power, rmsd, sineTone } from "../testutil.js";
-import { makeHilbertKernel, makeLowPassKernel } from "../../src/dsp/coefficients.js";
-import { FIRFilter } from "../../src/dsp/filters.js";
+import {
+  makeHilbertKernel,
+  makeLowPassKernel,
+} from "../../src/dsp/coefficients.js";
+import { DelayFilter, FIRFilter } from "../../src/dsp/filters.js";
 
 test("LowPassKernel", () => {
   let coefs = makeLowPassKernel(8000, 500, 151);
@@ -39,22 +42,21 @@ test("LowPassKernel", () => {
 test("HilbertKernel", () => {
   let coefs = makeHilbertKernel(151);
   let filter = new FIRFilter(coefs);
-  let delayFilter = filter.clone();
+  let delayFilter = new DelayFilter(filter.getDelay());
 
   const freq = (freq: number, phase: number) => {
     let signal = sineTone(800, 8000, freq, 1, phase);
-    delayFilter.delayInPlace(signal);
+    delayFilter.inPlace(signal);
     return signal.subarray(400);
-  }
+  };
   const filteredFreq = (freq: number) => {
     let signal = sineTone(800, 8000, freq, 1);
     filter.inPlace(signal);
     return signal.subarray(400);
-  }
+  };
 
   // Positive frequencies have a -pi/2 phase shift.
   assert.isAtMost(rmsd(filteredFreq(500), freq(500, -Math.PI / 2)), 1e-3);
   // Negative frequencies have a +pi/2 phase shift.
   assert.isAtMost(rmsd(filteredFreq(-500), freq(-500, Math.PI / 2)), 1e-3);
 });
-

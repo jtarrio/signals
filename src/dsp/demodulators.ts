@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { makeHilbertKernel } from "./coefficients.js";
-import { decay, FIRFilter, PilotDetector } from "./filters.js";
+import { decay, DelayFilter, FIRFilter, PilotDetector } from "./filters.js";
 import { Float32Pool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
@@ -32,13 +32,13 @@ export class SSBDemodulator {
    */
   constructor(sideband: Sideband, kernelLen: number) {
     let hilbert = makeHilbertKernel(kernelLen);
-    this.filterDelay = new FIRFilter(hilbert);
     this.filterHilbert = new FIRFilter(hilbert);
+    this.filterDelay = new DelayFilter(this.filterHilbert.getDelay());
     this.hilbertMul = sideband == Sideband.Upper ? -1 : 1;
   }
 
-  private filterDelay: FIRFilter;
   private filterHilbert: FIRFilter;
+  private filterDelay: DelayFilter;
   private hilbertMul: number;
 
   /** Switches the demodulator's sideband on the fly. */
@@ -48,13 +48,10 @@ export class SSBDemodulator {
 
   /** Demodulates the given I/Q samples into the real output. */
   demodulate(I: Float32Array, Q: Float32Array, out: Float32Array) {
-    this.filterDelay.loadSamples(I);
-    this.filterHilbert.loadSamples(Q);
+    this.filterDelay.inPlace(I);
+    this.filterHilbert.inPlace(Q);
     for (let i = 0; i < out.length; ++i) {
-      out[i] =
-        (this.filterDelay.getDelayed(i) +
-          this.filterHilbert.get(i) * this.hilbertMul) /
-        2;
+      out[i] = (I[i] + Q[i] * this.hilbertMul) / 2;
     }
   }
 }

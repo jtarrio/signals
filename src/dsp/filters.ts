@@ -64,13 +64,6 @@ export class FIRFilter implements Filter {
     }
   }
 
-  delayInPlace(samples: Float32Array) {
-    this.loadSamples(samples);
-    for (let i = 0; i < samples.length; ++i) {
-      samples[i] = this.getDelayed(i);
-    }
-  }
-
   /**
    * Loads a new block of samples to filter.
    * @param samples The samples to load.
@@ -119,13 +112,34 @@ export class FIRFilter implements Filter {
     }
     return out;
   }
+}
 
-  /**
-   * Returns a delayed sample.
-   * @param index The index of the relative sample to return.
-   */
-  getDelayed(index: number) {
-    return this.curSamples[index + this.center];
+/** A class to apply a delay to a sequence of samples. */
+export class DelayFilter implements Filter {
+  /** @param delay The number of samples to delay the signal by */
+  constructor(delay: number) {
+    this.buffer = new Float32Array(delay);
+    this.ptr = 0;
+  }
+
+  private buffer: Float32Array;
+  private ptr: number;
+
+  clone(): DelayFilter {
+    return new DelayFilter(this.getDelay());
+  }
+
+  getDelay(): number {
+    return this.buffer.length;
+  }
+
+  inPlace(samples: Float32Array) {
+    for (let i = 0; i < samples.length; ++i) {
+      let s = samples[i];
+      samples[i] = this.buffer[this.ptr];
+      this.buffer[this.ptr] = s;
+      this.ptr = (this.ptr + 1) % this.buffer.length;
+    }
   }
 }
 
@@ -228,27 +242,8 @@ export function decay(sampleRate: number, timeConstant: number): number {
   return 1 - Math.exp(-1 / (sampleRate * timeConstant));
 }
 
-/* Returns the time constant corresponding to a -3dB frequency. */
-export function frequencyToTimeConstant(freq: number) {
-  return 1 / (2 * Math.PI * freq);
-}
-
-export interface IIRFilter extends Filter {
-  /** Returns a newly initialized clone of this filter. */
-  clone(): IIRFilter;
-
-  /** Filters an individual sample. */
-  add(sample: number): number;
-
-  /** Returns the value currently held by the filter. */
-  get value(): number;
-
-  /** Returns the phase shift at the given frequency. */
-  phaseShift(freq: number): number;
-}
-
 /** IIR filter with two 'b' coefficients and one 'a' coefficient. */
-class IIRFilter21 implements IIRFilter {
+class IIRFilter21 implements Filter {
   constructor(private sampleRate: number, b0: number, b1: number, a1: number) {
     this.q = [b0, b1, a1];
     this.v = [0, 0];
@@ -258,7 +253,7 @@ class IIRFilter21 implements IIRFilter {
   private v: [number, number];
 
   /** Returns a copy of this filter. */
-  clone(): IIRFilter {
+  clone(): Filter {
     return new IIRFilter21(this.sampleRate, ...this.q);
   }
 
@@ -282,34 +277,10 @@ class IIRFilter21 implements IIRFilter {
     this.v[0] = x1;
     this.v[1] = y1;
   }
-
-  /** Filters an individual sample. */
-  add(sample: number): number {
-    this.v[1] =
-      this.q[0] * sample + this.q[1] * this.v[0] + this.q[2] * this.v[1];
-    this.v[0] = sample;
-    return this.v[1];
-  }
-
-  /** Returns the value currently held by the filter. */
-  get value() {
-    return this.v[1];
-  }
-
-  /** Returns the phase shift at the given angular frequency. */
-  phaseShift(freq: number): number {
-    const w = (2 * Math.PI * freq) / this.sampleRate;
-    const real =
-      Math.cos(w) * (this.q[1] - this.q[0] * this.q[2]) +
-      this.q[0] -
-      this.q[1] * this.q[2];
-    const imag = Math.sin(w) * (this.q[1] + this.q[0] * this.q[2]);
-    return atan2(imag, real);
-  }
 }
 
 /** IIR filter with three 'b' coefficients and two 'a' coefficient. */
-class IIRFilter32 implements IIRFilter {
+class IIRFilter32 implements Filter {
   constructor(
     private sampleRate: number,
     b0: number,
@@ -326,7 +297,7 @@ class IIRFilter32 implements IIRFilter {
   private v: [number, number, number, number];
 
   /** Returns a copy of this filter. */
-  clone(): IIRFilter {
+  clone(): Filter {
     return new IIRFilter32(this.sampleRate, ...this.q);
   }
 
@@ -358,46 +329,14 @@ class IIRFilter32 implements IIRFilter {
     this.v[2] = y1;
     this.v[3] = y2;
   }
-
-  /** Filters an individual sample. */
-  add(sample: number): number {
-    // b0*x0+b1*x1+b2*x2+a1*y1+a2*y2
-    let y0 =
-      this.q[0] * sample +
-      this.q[1] * this.v[0] +
-      this.q[2] * this.v[1] +
-      this.q[3] * this.v[2] +
-      this.q[4] * this.v[3];
-    this.v[3] = this.v[2];
-    this.v[2] = y0;
-    this.v[1] = this.v[0];
-    this.v[0] = sample;
-    return y0;
-  }
-
-  /** Returns the value currently held by the filter. */
-  get value() {
-    return this.v[1];
-  }
-
-  /** Returns the phase shift at the given angular frequency. */
-  phaseShift(freq: number): number {
-    const w = (2 * Math.PI * freq) / this.sampleRate;
-    const real =
-      Math.cos(w) * (this.q[1] - this.q[0] * this.q[2]) +
-      this.q[0] -
-      this.q[1] * this.q[2];
-    const imag = Math.sin(w) * (this.q[1] + this.q[0] * this.q[2]);
-    return atan2(imag, real);
-  }
 }
 
 /** Returns the coefficients for a first-order low-pass IIR filter. */
 function lowPassCoeffs21(
   sampleRate: number,
-  timeConstant: number
+  frequency: number
 ): [number, number, number] {
-  const wd = 1 / (timeConstant * sampleRate);
+  const wd = 2 * Math.PI * frequency / sampleRate;
   const wa = 2 * sampleRate * Math.tan(wd / 2);
   const tau = 1 / wa;
   let a = 1 + 2 * tau * sampleRate;
@@ -408,15 +347,19 @@ function lowPassCoeffs21(
 
 /**
  * Returns the coefficients for a second-order low-pass IIR filter.
- * 
+ *
  * From https://webaudio.github.io/Audio-EQ-Cookbook/Audio-EQ-Cookbook.txt
  */
-function lowPassCoeffs32(sampleRate: number, frequency: number, Q: number): [number, number, number, number, number] {
+function lowPassCoeffs32(
+  sampleRate: number,
+  frequency: number,
+  Q: number
+): [number, number, number, number, number] {
   let w = (2 * Math.PI * frequency) / sampleRate;
   let alpha = Math.sin(w) / (2 * Q);
   let b0 = (1 - Math.cos(w)) / 2;
   let b1 = 1 - Math.cos(w);
-  let b2 = (1 - Math.cos(w)) / 2;;
+  let b2 = (1 - Math.cos(w)) / 2;
   let a0 = 1 + alpha;
   let a1 = -2 * Math.cos(w);
   let a2 = 1 - alpha;
@@ -430,7 +373,7 @@ export class Deemphasis extends IIRFilter21 {
    * @param timeConstant The filter's time constant, in seconds.
    */
   constructor(sampleRate: number, timeConstant: number) {
-    super(sampleRate, ...lowPassCoeffs21(sampleRate, timeConstant));
+    super(sampleRate, ...lowPassCoeffs21(sampleRate, 1 / (2 * Math.PI * timeConstant)));
   }
 }
 
@@ -461,10 +404,7 @@ export class IIRLowPass extends IIRFilter21 {
    * @param freq The filter's corner frequency.
    */
   constructor(sampleRate: number, freq: number) {
-    super(
-      sampleRate,
-      ...lowPassCoeffs21(sampleRate, frequencyToTimeConstant(freq))
-    );
+    super(sampleRate, ...lowPassCoeffs21(sampleRate, freq));
   }
 }
 
@@ -476,10 +416,7 @@ export class IIRLowPass2 extends IIRFilter32 {
    * @param Q The filter's Q factor.
    */
   constructor(sampleRate: number, freq: number, Q: number) {
-    super(
-      sampleRate,
-      ...lowPassCoeffs32(sampleRate, freq, Q)
-    );
+    super(sampleRate, ...lowPassCoeffs32(sampleRate, freq, Q));
   }
 }
 
@@ -535,8 +472,8 @@ export class PilotDetector {
   private iqPool: IqPool;
   private downShifter: FrequencyShifter;
   private upShifter: FrequencyShifter;
-  private filterI: IIRFilter;
-  private filterQ: IIRFilter;
+  private filterI: Filter;
+  private filterQ: Filter;
   private prev: [number, number];
   private tolerance: number;
   private speedEstimate: number;

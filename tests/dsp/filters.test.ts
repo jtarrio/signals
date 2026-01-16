@@ -30,6 +30,7 @@ import {
   AGC,
   DcBlocker,
   Deemphasis,
+  DelayFilter,
   FIRFilter,
   FrequencyShifter,
   IIRLowPass,
@@ -38,9 +39,8 @@ import {
   Preemphasis,
 } from "../../src/dsp/filters.js";
 
-test("FIRFilter as delay line", () => {
-  let coefs = new Float32Array([0, 0, 1, 0, 0]);
-  let filter = new FIRFilter(coefs);
+test("DelayFilter", () => {
+  let filter = new DelayFilter(2);
 
   // Using inPlace
   let signal = count(10, 15);
@@ -58,21 +58,9 @@ test("FIRFilter as delay line", () => {
   signal = count(40, 43);
   filter.inPlace(signal);
   assert.deepEqual(signal, new Float32Array([38, 39, 40]));
-
-  // Compare get() and getDelay()
-  filter = new FIRFilter(coefs);
-  signal = count(100, 110);
-  filter.loadSamples(signal);
-  let expected = new Float32Array([
-    0, 0, 100, 101, 102, 103, 104, 105, 106, 107,
-  ]);
-  for (let i = 0; i < 10; ++i) {
-    assert.equal(filter.get(i), filter.getDelayed(i));
-    assert.equal(filter.get(i), expected[i]);
-  }
 });
 
-test("FIRFilter as convolution filter", () => {
+test("FIRFilter", () => {
   let coefs = new Float32Array([1, 2, 5, 9, 16]);
   const conv = (signal: Float32Array) => {
     let filter = new FIRFilter(coefs);
@@ -183,9 +171,6 @@ test("IIRLowPass", () => {
       let o = xc / Math.hypot(xr, xc);
       return (o * o) / 2;
     };
-
-    let f = new IIRLowPass(sampleRate, cornerFrequency);
-    assert.approximately(f.phaseShift(cornerFrequency), Math.PI / 4, 1e-7);
 
     assert.approximately(filterPower(cornerFrequency), 0.25, 0.005);
 

@@ -135,7 +135,7 @@ for (let i = 0; i < output.length; i++) {
 
 You can also use the FIR filter to perform a Hilbert transform with the `makeHilbertKernel()` function from [`dsp/coefficients.ts`](../src/dsp/coefficients.ts).
 
-The FIR filter introduces some delay, which would make adding the transformed and original signals together a little hard. To solve this, the `FIRFilter` class provides a `getDelayed()` method. This method works as if the `FIRFilter` class had received a kernel consisting of all zeroes and a 1 in the center element, but avoids performing unnecessary convolutions.
+The FIR filter introduces some delay, which would make adding the transformed and original signals together a little hard. To solve this, we also provide a `DelayFilter` that applies a delay to the incoming samples, and which you can initialize with the `FIRFilter` class's `getDelay()` method.
 
 ```typescript
 import { makeHilbertKernel } from "@jtarrio/signals/dsp/coefficients.js";
@@ -144,15 +144,15 @@ import { FIRFilter } from "@jtarrio/signals/dsp/filters.js";
 const kernelLen = 151;
 let hilbert = makeHilbertKernel(kernelLen);
 let filter = new FIRFilter(hilbert);
-let delay = new FIRFilter(hilbert); // The kernel is irrelevant, but it must be the same length as the filter.
+let delay = new DelayFilter(filter.getDelay());
 
 let samples: [Float32Array, Float32Array] = getIqSamples();
-this.delay.loadSamples(samples[0]);
-this.filter.loadSamples(samples[1]);
+this.delay.inPlace(samples[0]);
+this.filter.inPlace(samples[1]);
 
 let out = new Float32Array(samples[0].length);
 for (let i = 0; i < out.length; ++i) {
-  out[i] = delay.getDelayed(i) + filter.get(i);
+  out[i] = samples[0][i] + samples[1][i];
 }
 ```
 
@@ -165,8 +165,6 @@ The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains several classes that
 * `Deemphasis` implements a 1-pole de-emphasis filter for FM demodulation with a given time constant (given in seconds.)
 * `Preemphasis` implements a 1-pole pre-emphasis filter for FM modulation with a given time constant (given in seconds.)
 
-All these filters have an `inPlace()` method as well as an `add()` method that filters single samples, a `value` getter that returns the filters' current output, and a `phaseShift()` method that returns the filter's phase shift for a given frequency.
-
 ```typescript
 import { Deemphasis } from "@jtarrio/signals/dsp/filters.js";
 
@@ -177,13 +175,6 @@ let deemph = new Deemphasis(sampleRate, tc);
 // Filter in place
 let samples: Float32Array = getSomeSamples();
 deemph.inplace(samples);
-
-// Filter one sample at a time
-samples = getSomeSamples();
-output = new Float32Array(samples.length);
-for (let i = 0; i < samples.length; ++i) {
-  output[i] = deemph.add(samples[i]);
-}
 ```
 
 ### DC blocker
