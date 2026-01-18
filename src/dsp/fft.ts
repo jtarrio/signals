@@ -23,7 +23,7 @@ import { Float32RingBuffer, IqPool } from "./buffers.js";
  * so this function returns the next available length.
  */
 export function actualLength(minimumLength: number): number {
-  if (minimumLength < 2) return 0;
+  if (minimumLength < 4) minimumLength = 4;
   if (((minimumLength - 1) & minimumLength) == 0) return minimumLength;
   let realLength = 1;
   while (realLength < minimumLength) realLength <<= 1;
@@ -51,18 +51,15 @@ export class FFT {
 
   private constructor(public length: number) {
     this.revIndex = reversedBitIndices(length);
-    let [fwd, bwd] = makeFftCoefficients(length);
-    this.fwd = fwd;
-    this.bwd = bwd;
-    this.copy = new IqPool(2, length);
-    this.out = new IqPool(2, length);
+    this.coefs = makeFftCoefficients(length);
+    this.copy = new IqPool(4, length);
+    this.out = new IqPool(4, length);
     this.window = new Float32Array(length);
     this.window.fill(1);
   }
 
   private revIndex: Int32Array;
-  private fwd: ComplexArray[];
-  private bwd: ComplexArray[];
+  private coefs: ComplexArray[];
   private copy: IqPool;
   private out: IqPool;
   private window: Float32Array;
@@ -90,13 +87,13 @@ export class FFT {
       outReal[ri] = (this.window[i] * real[i]) / length;
       outImag[ri] = (this.window[i] * imag[i]) / length;
     }
-    doFastTransform(this.length, this.fwd, outReal, outImag);
+    doFastTransform(this.length, false, this.coefs, outReal, outImag);
     return [outReal, outImag];
   }
 
   transformCircularBuffers(
     real: Float32RingBuffer,
-    imag: Float32RingBuffer
+    imag: Float32RingBuffer,
   ): FFTOutput {
     const length = this.length;
     let [copyReal, copyImag] = this.copy.get(length);
@@ -121,10 +118,10 @@ export class FFT {
     outImag.fill(0);
     for (let i = 0; i < length && i < real.length && i < imag.length; ++i) {
       const ri = this.revIndex[i];
-      outReal[ri] = this.window[i] * real[i];
-      outImag[ri] = this.window[i] * imag[i];
+      outReal[ri] = real[i];
+      outImag[ri] = imag[i];
     }
-    doFastTransform(this.length, this.bwd, outReal, outImag);
+    doFastTransform(this.length, true, this.coefs, outReal, outImag);
     return [outReal, outImag];
   }
 }
@@ -132,33 +129,107 @@ export class FFT {
 /** Performs a fast direct or reverse transform in place. */
 function doFastTransform(
   length: number,
+  reverse: boolean,
   coefs: ComplexArray[],
   real: Float32Array,
-  imag: Float32Array
+  imag: Float32Array,
 ) {
+  const s = reverse ? -1 : 1;
+
+  for (let dftStart = 0; dftStart < length; dftStart += 4) {
+    const n0 = dftStart;
+    const n1 = dftStart + 1;
+    const n2 = dftStart + 2;
+    const n3 = dftStart + 3;
+    const a0 = real[n0];
+    const a1 = real[n1];
+    const a2 = real[n2];
+    const a3 = real[n3];
+    const b0 = imag[n0];
+    const b1 = imag[n1];
+    const b2 = imag[n2];
+    const b3 = imag[n3];
+    real[n0] = a0 + a1 + a2 + a3;
+    real[n1] = a0 - a1 - s * (b3 - b2);
+    real[n2] = a0 + a1 - a2 - a3;
+    real[n3] = a0 - a1 + s * (b3 - b2);
+    imag[n0] = b0 + b1 + b2 + b3;
+    imag[n1] = b0 - b1 - s * (a2 - a3);
+    imag[n2] = b0 + b1 - b2 - b3;
+    imag[n3] = b0 - b1 + s * (a2 - a3);
+  }
+
   for (
-    let dftSize = 2, coeffBin = 0;
+    let dftSize = 8, coeffBin = 0;
     dftSize <= length;
     dftSize *= 2, ++coeffBin
   ) {
     const binCoefficients = coefs[coeffBin];
     const halfDftSize = dftSize / 2;
     for (let dftStart = 0; dftStart < length; dftStart += dftSize) {
-      for (let i = 0; i < halfDftSize; ++i) {
-        const near = dftStart + i;
-        const far = near + halfDftSize;
-        const evenReal = real[near];
-        const evenImag = imag[near];
-        const cr = binCoefficients.real[i];
-        const ci = binCoefficients.imag[i];
-        const or = real[far];
-        const oi = imag[far];
-        const oddReal = cr * or - ci * oi;
-        const oddImag = cr * oi + ci * or;
-        real[near] = evenReal + oddReal;
-        imag[near] = evenImag + oddImag;
-        real[far] = evenReal - oddReal;
-        imag[far] = evenImag - oddImag;
+      for (let i = 0; i < halfDftSize; i += 4) {
+        {
+          const cr0 = binCoefficients.real[i];
+          const ci0 = binCoefficients.imag[i] * s;
+          const cr1 = binCoefficients.real[i + 1];
+          const ci1 = binCoefficients.imag[i + 1] * s;
+          const cr2 = binCoefficients.real[i + 2];
+          const ci2 = binCoefficients.imag[i + 2] * s;
+          const cr3 = binCoefficients.real[i + 3];
+          const ci3 = binCoefficients.imag[i + 3] * s;
+
+          const near0 = dftStart + i;
+          const far0 = near0 + halfDftSize;
+          const evenReal0 = real[near0];
+          const or0 = real[far0];
+          const evenImag0 = imag[near0];
+          const oi0 = imag[far0];
+          const oddReal0 = cr0 * or0 - ci0 * oi0;
+          const oddImag0 = cr0 * oi0 + ci0 * or0;
+          real[near0] = evenReal0 + oddReal0;
+          real[far0] = evenReal0 - oddReal0;
+          imag[near0] = evenImag0 + oddImag0;
+          imag[far0] = evenImag0 - oddImag0;
+
+          const near1 = dftStart + i + 1;
+          const far1 = near1 + halfDftSize;
+          const evenReal1 = real[near1];
+          const or1 = real[far1];
+          const evenImag1 = imag[near1];
+          const oi1 = imag[far1];
+          const oddReal1 = cr1 * or1 - ci1 * oi1;
+          const oddImag1 = cr1 * oi1 + ci1 * or1;
+          real[near1] = evenReal1 + oddReal1;
+          real[far1] = evenReal1 - oddReal1;
+          imag[near1] = evenImag1 + oddImag1;
+          imag[far1] = evenImag1 - oddImag1;
+
+          const near2 = dftStart + i + 2;
+          const far2 = near2 + halfDftSize;
+          const evenReal2 = real[near2];
+          const or2 = real[far2];
+          const evenImag2 = imag[near2];
+          const oi2 = imag[far2];
+          const oddReal2 = cr2 * or2 - ci2 * oi2;
+          const oddImag2 = cr2 * oi2 + ci2 * or2;
+          real[near2] = evenReal2 + oddReal2;
+          real[far2] = evenReal2 - oddReal2;
+          imag[near2] = evenImag2 + oddImag2;
+          imag[far2] = evenImag2 - oddImag2;
+
+          const near3 = dftStart + i + 3;
+          const far3 = near3 + halfDftSize;
+          const evenReal3 = real[near3];
+          const or3 = real[far3];
+          const evenImag3 = imag[near3];
+          const oi3 = imag[far3];
+          const oddReal3 = cr3 * or3 - ci3 * oi3;
+          const oddImag3 = cr3 * oi3 + ci3 * or3;
+          real[near3] = evenReal3 + oddReal3;
+          real[far3] = evenReal3 - oddReal3;
+          imag[near3] = evenImag3 + oddImag3;
+          imag[far3] = evenImag3 - oddImag3;
+        }
       }
     }
   }
@@ -168,31 +239,23 @@ function doFastTransform(
 type ComplexArray = { real: Float32Array; imag: Float32Array };
 
 /** Builds a triangle of direct and reverse FFT coefficients for the given length. */
-function makeFftCoefficients(length: number): [ComplexArray[], ComplexArray[]] {
+function makeFftCoefficients(length: number): ComplexArray[] {
   let numBits = getNumBits(length);
-  let fwd: ComplexArray[] = [];
-  let bwd: ComplexArray[] = [];
+  let coefs: ComplexArray[] = [];
 
-  for (let bin = 0, halfSize = 1; bin < numBits; ++bin, halfSize *= 2) {
-    fwd.push({
-      real: new Float32Array(halfSize),
-      imag: new Float32Array(halfSize),
-    });
-    bwd.push({
+  for (let bin = 0, halfSize = 4; bin < numBits; ++bin, halfSize *= 2) {
+    coefs.push({
       real: new Float32Array(halfSize),
       imag: new Float32Array(halfSize),
     });
     for (let i = 0; i < halfSize; ++i) {
       const fwdAngle = (-1 * Math.PI * i) / halfSize;
-      fwd[bin].real[i] = Math.cos(fwdAngle);
-      fwd[bin].imag[i] = Math.sin(fwdAngle);
-      const bwdAngle = (Math.PI * i) / halfSize;
-      bwd[bin].real[i] = Math.cos(bwdAngle);
-      bwd[bin].imag[i] = Math.sin(bwdAngle);
+      coefs[bin].real[i] = Math.cos(fwdAngle);
+      coefs[bin].imag[i] = Math.sin(fwdAngle);
     }
   }
 
-  return [fwd, bwd];
+  return coefs;
 }
 
 /** Builds an array of numbers with their bits reversed. */
