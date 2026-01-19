@@ -163,6 +163,35 @@ class RingBuffer<T extends TypedArray<T>> {
     this.filled = 0;
   }
 
+  /**
+   * Stores repeated copies of a value in the ring buffer.
+   * 
+   * @param value the value to store.
+   * @param count the number of copies to store. The whole ring buffer is filled if not specified.
+   * */
+  fill(value: number, count?: number) {
+    if (count === undefined || count >= this.buffer.length) {
+      this.buffer.fill(value);
+      this.readPos = 0;
+      this.writePos = 0;
+      this.filled = this.buffer.length;
+      return;
+    }
+    let remaining = count;
+    let dstOffset = this.writePos;
+    while (remaining > 0) {
+      const copyCount = Math.min(remaining, this.buffer.length - this.writePos);
+      this.buffer.subarray(dstOffset, dstOffset + copyCount).fill(value);
+      dstOffset = (dstOffset + copyCount) % this.buffer.length;
+      remaining -= copyCount;
+    }
+    this.writePos = dstOffset;
+    this.filled = Math.min(this.buffer.length, this.filled + count);
+    if (this.filled == this.buffer.length) {
+      this.readPos = this.writePos;
+    }
+  }
+
   /** Copies the provided data into the ring buffer. */
   store(data: T) {
     let count = Math.min(data.length, this.buffer.length);
@@ -192,6 +221,16 @@ class RingBuffer<T extends TypedArray<T>> {
     this.readPos = srcOffset;
     this.filled -= count;
     return count;
+  }
+
+  /**
+   * Consumes a number of values from the ring buffer, as if they had been read through moveTo().
+   * @param count the number of values to consume.
+   */
+  consume(count: number) {
+    let discard = Math.min(this.filled, count);
+    this.readPos = (this.readPos + discard) % this.buffer.length;
+    this.filled -= discard;
   }
 
   /**

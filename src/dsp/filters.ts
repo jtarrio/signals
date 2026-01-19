@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32Pool, IqPool } from "./buffers.js";
+import { Float32Pool, Float32RingBuffer, IqPool } from "./buffers.js";
+import { actualLength, FFT } from "./fft.js";
 import { atan2 } from "./math.js";
 
 export interface Filter {
@@ -73,7 +74,7 @@ export class FIRFilter implements Filter {
     if (this.curSamples.length != len) {
       let newSamples = this.pool.get(len);
       newSamples.set(
-        this.curSamples.subarray(this.curSamples.length - this.offset)
+        this.curSamples.subarray(this.curSamples.length - this.offset),
       );
       this.curSamples = newSamples;
     } else {
@@ -114,6 +115,111 @@ export class FIRFilter implements Filter {
   }
 }
 
+/** A class that applies a FIR filter using successive Fourier transforms. */
+export class FFTFilter implements Filter {
+  constructor(coefs: Float32Array) {
+    this.fft = FFT.ofLength(coefs.length * 2);
+    this.kernel = this.computeKernel(coefs);
+    this.overlap = coefs.length - 1;
+
+    this.input = new Float32RingBuffer(this.fft.length);
+    this.input.fill(0, this.overlap);
+    this.work = new Float32Array(this.fft.length);
+    this.empty = new Float32Array(this.fft.length);
+    this.output = new Float32RingBuffer((this.fft.length - this.overlap) * 2);
+    this.output.fill(0, this.fft.length - this.overlap);
+  }
+
+  private fft: FFT;
+  private kernel: [Float32Array, Float32Array];
+  private overlap: number;
+  private input: Float32RingBuffer;
+  private work: Float32Array;
+  private empty: Float32Array;
+  private output: Float32RingBuffer;
+
+  private computeKernel(coefs: Float32Array): [Float32Array, Float32Array] {
+    let I = new Float32Array(this.fft.length);
+    let Q = new Float32Array(this.fft.length);
+    I.set(coefs);
+    I.subarray(0, coefs.length).reverse();
+    for (let i = 0; i < I.length; ++i) {
+      I[i] *= I.length;
+    }
+    let kernel = this.fft.transform(I, Q);
+    return [new Float32Array(kernel[0]), new Float32Array(kernel[1])];
+  }
+
+  setCoefficients(coefs: Float32Array) {
+    let fftLength = actualLength(coefs.length * 2);
+    let newOverlap = coefs.length - 1;
+    this.kernel = this.computeKernel(coefs);
+    if (fftLength == this.fft.length && newOverlap == this.overlap) {
+      return;
+    }
+
+    this.fft = FFT.ofLength(fftLength);
+    this.overlap = newOverlap;
+
+    let oldInput = new Float32Array(this.input.available);
+    this.input.moveTo(oldInput);
+    this.input = new Float32RingBuffer(this.fft.length);
+    if (newOverlap > oldInput.length) {
+      this.input.fill(0, newOverlap - oldInput.length);
+    }
+    this.input.store(oldInput);
+    this.work = new Float32Array(this.fft.length);
+    this.empty = new Float32Array(this.fft.length);
+    this.output = new Float32RingBuffer((this.fft.length - this.overlap) * 2);
+    this.output.fill(0, this.fft.length - this.overlap);
+  }
+
+  clone(): Filter {
+    let newFilter = new FFTFilter(new Float32Array(this.overlap + 1));
+    newFilter.kernel = this.kernel;
+    return newFilter;
+  }
+
+  getDelay(): number {
+    return this.fft.length - this.overlap / 2;
+  }
+
+  inPlace(samples: Float32Array): void {
+    let readPos = 0;
+    let writePos = 0;
+    while (samples.length - readPos > 0) {
+      if (this.input.available < this.input.capacity) {
+        let toCopy = Math.min(
+          samples.length - readPos,
+          this.input.capacity - this.input.available,
+        );
+        this.input.store(samples.subarray(readPos, readPos + toCopy));
+        readPos += toCopy;
+      }
+      if (this.input.available == this.input.capacity) {
+        this.input.copyTo(this.work);
+        this.input.consume(this.input.capacity - this.overlap);
+
+        let fd = this.fft.transform(this.work, this.empty);
+        for (let i = 0; i < fd[0].length; ++i) {
+          let sI = fd[0][i];
+          let sQ = fd[1][i];
+          let kI = this.kernel[0][i];
+          let kQ = this.kernel[1][i];
+          fd[0][i] = sI * kI - sQ * kQ;
+          fd[1][i] = sQ * kI + sI * kQ;
+        }
+        let td = this.fft.reverse(fd[0], fd[1]);
+        this.output.store(td[0].subarray(this.overlap));
+      }
+      if (writePos < samples.length) {
+        let moved = this.output.moveTo(samples.subarray(writePos, readPos));
+        writePos += moved;
+      }
+    }
+  }
+}
+
 /** A class to apply a delay to a sequence of samples. */
 export class DelayFilter implements Filter {
   /** @param delay The number of samples to delay the signal by */
@@ -148,7 +254,7 @@ export class AGC implements Filter {
   constructor(
     private sampleRate: number,
     timeConstantSeconds: number,
-    maxGain?: number
+    maxGain?: number,
   ) {
     this.dcBlocker = new DcBlocker(sampleRate);
     this.alpha = decay(sampleRate, timeConstantSeconds);
@@ -244,7 +350,12 @@ export function decay(sampleRate: number, timeConstant: number): number {
 
 /** IIR filter with two 'b' coefficients and one 'a' coefficient. */
 class IIRFilter21 implements Filter {
-  constructor(private sampleRate: number, b0: number, b1: number, a1: number) {
+  constructor(
+    private sampleRate: number,
+    b0: number,
+    b1: number,
+    a1: number,
+  ) {
     this.q = [b0, b1, a1];
     this.v = [0, 0];
   }
@@ -287,7 +398,7 @@ class IIRFilter32 implements Filter {
     b1: number,
     b2: number,
     a1: number,
-    a2: number
+    a2: number,
   ) {
     this.q = [b0, b1, b2, a1, a2];
     this.v = [0, 0, 0, 0];
@@ -334,9 +445,9 @@ class IIRFilter32 implements Filter {
 /** Returns the coefficients for a first-order low-pass IIR filter. */
 function lowPassCoeffs21(
   sampleRate: number,
-  frequency: number
+  frequency: number,
 ): [number, number, number] {
-  const wd = 2 * Math.PI * frequency / sampleRate;
+  const wd = (2 * Math.PI * frequency) / sampleRate;
   const wa = 2 * sampleRate * Math.tan(wd / 2);
   const tau = 1 / wa;
   let a = 1 + 2 * tau * sampleRate;
@@ -353,7 +464,7 @@ function lowPassCoeffs21(
 function lowPassCoeffs32(
   sampleRate: number,
   frequency: number,
-  Q: number
+  Q: number,
 ): [number, number, number, number, number] {
   let w = (2 * Math.PI * frequency) / sampleRate;
   let alpha = Math.sin(w) / (2 * Q);
@@ -373,7 +484,10 @@ export class Deemphasis extends IIRFilter21 {
    * @param timeConstant The filter's time constant, in seconds.
    */
   constructor(sampleRate: number, timeConstant: number) {
-    super(sampleRate, ...lowPassCoeffs21(sampleRate, 1 / (2 * Math.PI * timeConstant)));
+    super(
+      sampleRate,
+      ...lowPassCoeffs21(sampleRate, 1 / (2 * Math.PI * timeConstant)),
+    );
   }
 }
 
@@ -455,7 +569,7 @@ export class PilotDetector {
   constructor(
     private sampleRate: number,
     private targetFreq: number,
-    tolerance: number
+    tolerance: number,
   ) {
     this.iqPool = new IqPool(2);
     this.downShifter = new FrequencyShifter(sampleRate);

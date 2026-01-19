@@ -37,7 +37,9 @@ import {
   IIRLowPass2,
   PilotDetector,
   Preemphasis,
+  FFTFilter,
 } from "../../src/dsp/filters.js";
+import { makeLowPassKernel } from "../../dist/dsp/coefficients.js";
 
 test("DelayFilter", () => {
   let filter = new DelayFilter(2);
@@ -95,6 +97,30 @@ test("FIRFilter", () => {
   assert.deepEqual(
     conv(new Float32Array([0, 1, 0, 0, 1, 0])),
     new Float32Array([0, 16, 9, 5, 18, 10])
+  );
+});
+
+test("STFTFilter", () => {
+  let coefs = makeLowPassKernel(1024000, 150000, 151);
+  let fir = new FIRFilter(coefs);
+  let stft = new FFTFilter(coefs);
+
+  let input = sineTone(10000, 1024000, 150000, 1, 0.1234);
+  let firInput = new Float32Array(input);
+  let stftInput = new Float32Array(input);
+
+  fir.inPlace(firInput);
+  stft.inPlace(stftInput);
+
+  let firDelay = fir.getDelay();
+  let stftDelay = stft.getDelay();
+
+  assert.isAtMost(
+    rmsd(
+      firInput.subarray(firDelay, firInput.length - stftDelay),
+      stftInput.subarray(stftDelay, stftInput.length - firDelay)
+    ),
+    1e-7
   );
 });
 

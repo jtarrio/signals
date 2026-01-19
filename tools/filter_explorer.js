@@ -16,7 +16,7 @@
 
 import * as Coefficients from "../dist/dsp/coefficients.js";
 import * as Filters from "../dist/dsp/filters.js";
-import { FFT } from "../dist/dsp/fft.js";
+import { actualLength, FFT } from "../dist/dsp/fft.js";
 
 function getControls() {
   return {
@@ -27,6 +27,7 @@ function getControls() {
       qfactor: document.getElementById("qfactor"),
       taps: document.getElementById("taps"),
       timeConstant: document.getElementById("timeConstant"),
+      useFft: document.getElementById("usefft"),
     },
     filterParams: document.getElementById("filterParams"),
     filterView: document.getElementById("filterView"),
@@ -49,7 +50,7 @@ function attachEvents(controls) {
 function updateVisibleControls(controls) {
   for (const c of document.getElementsByClassName("ctr")) c.hidden = true;
   for (const c of document.getElementsByClassName(
-    `ctr-${controls.filterType.value}`
+    `ctr-${controls.filterType.value}`,
   ))
     c.hidden = false;
 }
@@ -63,51 +64,61 @@ function getFilter(controls) {
           Coefficients.makeLowPassKernel(
             sampleRate,
             Number(controls.input.bandwidth.value) / 2,
-            Number(controls.input.taps.value)
-          )
-        )
+            Number(controls.input.taps.value),
+          ),
+        ),
       );
     case "iirlowpass":
       return new FilterAdapter(
         new Filters.IIRLowPass(
           sampleRate,
-          Number(controls.input.bandwidth.value) / 2
-        )
+          Number(controls.input.bandwidth.value) / 2,
+        ),
       );
     case "iirlowpass2":
       return new FilterAdapter(
         new Filters.IIRLowPass2(
           sampleRate,
           Number(controls.input.bandwidth.value) / 2,
-          Number(controls.input.qfactor.value)
-        )
+          Number(controls.input.qfactor.value),
+        ),
+      );
+    case "stftlowpass":
+      return new FilterAdapter(
+        Filters.STFTFilter.fromCoefficients(
+          Coefficients.makeLowPassKernel(
+            sampleRate,
+            Number(controls.input.bandwidth.value) / 2,
+            Number(controls.input.taps.value),
+          ),
+        ),
       );
     case "hilbert":
       return new FilterAdapter(
         new Filters.FIRFilter(
-          Coefficients.makeHilbertKernel(Number(controls.input.taps.value))
-        )
+          Coefficients.makeHilbertKernel(Number(controls.input.taps.value)),
+        ),
       );
     case "preemphasis":
       return new FilterAdapter(
         new Filters.Preemphasis(
           sampleRate,
-          Number(controls.input.timeConstant.value) / 1e6
-        )
+          Number(controls.input.timeConstant.value) / 1e6,
+        ),
       );
     case "deemphasis":
       return new FilterAdapter(
         new Filters.Deemphasis(
           sampleRate,
-          Number(controls.input.timeConstant.value) / 1e6
-        )
+          Number(controls.input.timeConstant.value) / 1e6,
+        ),
       );
     case "predeemphasis":
       return new FilterAdapter(
         new PreDeemphasis(
           sampleRate,
-          Number(controls.input.timeConstant.value) / 1e6
-        )
+          Number(controls.input.timeConstant.value) / 1e6,
+        ),
       );
     case "dcblocker":
       return new FilterAdapter(new Filters.DcBlocker(sampleRate));
@@ -178,14 +189,14 @@ function getGrid(left, top, right, bottom, sampleRate, range) {
     range,
     bottom - top,
     20,
-    60
+    60,
   );
   const { size: freqDivSize, range: freqPerDiv } = computeDivisionSize(
     sampleRate / 2,
     Math.floor((right - left) / 2),
     30,
     70,
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 32, 64, 128, 256, 512, 1024]
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 32, 64, 128, 256, 512, 1024],
   );
   let out = {
     left,
@@ -247,7 +258,7 @@ function drawGrid(ctx, grid) {
       String(Math.round(line.freq)),
       line.x,
       grid.top - 10,
-      grid.freqWidth - 10
+      grid.freqWidth - 10,
     );
   }
   ctx.stroke();
@@ -276,23 +287,23 @@ function phaseColor(c, s) {
       (p < 0.25
         ? 1
         : p < 0.5
-        ? 1 - 4 * (p - 0.25)
-        : p < 0.75
-        ? 0
-        : 4 * (p - 0.75))
+          ? 1 - 4 * (p - 0.25)
+          : p < 0.75
+            ? 0
+            : 4 * (p - 0.75)),
   );
   const g = Math.floor(
-    255 * (p < 0.25 ? 1 - 4 * p : p < 0.5 ? 0 : p < 0.75 ? 4 * (p - 0.5) : 1)
+    255 * (p < 0.25 ? 1 - 4 * p : p < 0.5 ? 0 : p < 0.75 ? 4 * (p - 0.5) : 1),
   );
   const b = Math.floor(
     255 *
       (p < 0.25
         ? 0
         : p < 0.5
-        ? 4 * (p - 0.25)
-        : p < 0.75
-        ? 1 - 4 * (p - 0.5)
-        : 0)
+          ? 4 * (p - 0.25)
+          : p < 0.75
+            ? 1 - 4 * (p - 0.5)
+            : 0),
   );
   return `rgb(${r}, ${g}, ${b})`;
 }
@@ -320,7 +331,7 @@ function plotFilter(ctx, left, top, right, bottom, sampleRate, filter) {
       spectrum[0].length;
     gradient.addColorStop(
       (x - left) / (right - left),
-      phaseColor(spectrum[0][bin], spectrum[1][bin])
+      phaseColor(spectrum[0][bin], spectrum[1][bin]),
     );
     const power =
       spectrum[0][bin] * spectrum[0][bin] + spectrum[1][bin] * spectrum[1][bin];
@@ -403,6 +414,7 @@ function main() {
   let controls = getControls();
   attachEvents(controls);
   updateFilter(controls);
+  updateVisibleControls(controls);
 }
 
 window.addEventListener("load", main);
