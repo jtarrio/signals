@@ -16,7 +16,7 @@
 
 import * as Coefficients from "../dist/dsp/coefficients.js";
 import * as Filters from "../dist/dsp/filters.js";
-import { actualLength, FFT } from "../dist/dsp/fft.js";
+import { FFT } from "../dist/dsp/fft.js";
 
 function getControls() {
   return {
@@ -27,7 +27,7 @@ function getControls() {
       qfactor: document.getElementById("qfactor"),
       taps: document.getElementById("taps"),
       timeConstant: document.getElementById("timeConstant"),
-      useFft: document.getElementById("usefft"),
+      fftFilter: document.getElementById("fftFilter"),
     },
     filterParams: document.getElementById("filterParams"),
     filterView: document.getElementById("filterView"),
@@ -60,7 +60,8 @@ function getFilter(controls) {
   switch (controls.filterType.value) {
     case "firlowpass":
       return new FilterAdapter(
-        new Filters.FIRFilter(
+        firFilter(
+          controls,
           Coefficients.makeLowPassKernel(
             sampleRate,
             Number(controls.input.bandwidth.value) / 2,
@@ -83,22 +84,6 @@ function getFilter(controls) {
           Number(controls.input.qfactor.value),
         ),
       );
-    case "stftlowpass":
-      return new FilterAdapter(
-        Filters.STFTFilter.fromCoefficients(
-          Coefficients.makeLowPassKernel(
-            sampleRate,
-            Number(controls.input.bandwidth.value) / 2,
-            Number(controls.input.taps.value),
-          ),
-        ),
-      );
-    case "hilbert":
-      return new FilterAdapter(
-        new Filters.FIRFilter(
-          Coefficients.makeHilbertKernel(Number(controls.input.taps.value)),
-        ),
-      );
     case "preemphasis":
       return new FilterAdapter(
         new Filters.Preemphasis(
@@ -118,6 +103,13 @@ function getFilter(controls) {
         new PreDeemphasis(
           sampleRate,
           Number(controls.input.timeConstant.value) / 1e6,
+        ),
+      );
+    case "hilbert":
+      return new FilterAdapter(
+        firFilter(
+          controls,
+          Coefficients.makeHilbertKernel(Number(controls.input.taps.value)),
         ),
       );
     case "dcblocker":
@@ -408,6 +400,13 @@ class PreDeemphasis {
   getDelay() {
     return this.pre.getDelay() + this.de.getDelay();
   }
+}
+
+function firFilter(controls, coefficients) {
+  if (controls.input.fftFilter) {
+    return new Filters.FFTFilter(coefficients);
+  }
+  return new Filters.FIRFilter(coefficients);
 }
 
 function main() {
