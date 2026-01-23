@@ -125,7 +125,6 @@ export class FFTFilter implements Filter {
     this.input = new Float32RingBuffer(this.fft.length);
     this.input.fill(0, this.overlap);
     this.work = new Float32Array(this.fft.length);
-    this.empty = new Float32Array(this.fft.length);
     this.output = new Float32RingBuffer((this.fft.length - this.overlap) * 2);
     this.output.fill(0, this.fft.length - this.overlap);
   }
@@ -135,7 +134,6 @@ export class FFTFilter implements Filter {
   private overlap: number;
   private input: Float32RingBuffer;
   private work: Float32Array;
-  private empty: Float32Array;
   private output: Float32RingBuffer;
 
   private computeKernel(coefs: Float32Array): [Float32Array, Float32Array] {
@@ -169,7 +167,6 @@ export class FFTFilter implements Filter {
     }
     this.input.store(oldInput);
     this.work = new Float32Array(this.fft.length);
-    this.empty = new Float32Array(this.fft.length);
     this.output = new Float32RingBuffer((this.fft.length - this.overlap) * 2);
     this.output.fill(0, this.fft.length - this.overlap);
   }
@@ -200,7 +197,7 @@ export class FFTFilter implements Filter {
         this.input.copyTo(this.work);
         this.input.consume(this.input.capacity - this.overlap);
 
-        let fd = this.fft.transform(this.work, this.empty);
+        let fd = this.fft.transform(this.work);
         for (let i = 0; i < fd[0].length; ++i) {
           let sI = fd[0][i];
           let sQ = fd[1][i];

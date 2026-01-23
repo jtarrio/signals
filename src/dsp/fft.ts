@@ -75,17 +75,24 @@ export class FFT {
    * @param imag An array of imaginary parts.
    * @return The output of the transform.
    */
-  transform(real: Float32Array, imag: Float32Array): FFTOutput;
-  transform(real: number[], imag: number[]): FFTOutput;
-  transform<T extends Array<number>>(real: T, imag: T): FFTOutput {
+  transform(real: Float32Array, imag?: Float32Array): FFTOutput;
+  transform(real: number[], imag?: number[]): FFTOutput;
+  transform<T extends Array<number>>(real: T, imag?: T): FFTOutput {
     const length = this.length;
     let [outReal, outImag] = this.out.get(length);
     outReal.fill(0);
     outImag.fill(0);
-    for (let i = 0; i < length && i < real.length && i < imag.length; ++i) {
-      const ri = this.revIndex[i];
-      outReal[ri] = (this.window[i] * real[i]) / length;
-      outImag[ri] = (this.window[i] * imag[i]) / length;
+    if (imag === undefined) {
+      for (let i = 0; i < length && i < real.length; ++i) {
+        const ri = this.revIndex[i];
+        outReal[ri] = (this.window[i] * real[i]) / length;
+      }
+    } else {
+      for (let i = 0; i < length && i < real.length && i < imag.length; ++i) {
+        const ri = this.revIndex[i];
+        outReal[ri] = (this.window[i] * real[i]) / length;
+        outImag[ri] = (this.window[i] * imag[i]) / length;
+      }
     }
     doFastTransform(this.length, false, this.coefs, outReal, outImag);
     return [outReal, outImag];
