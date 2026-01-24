@@ -115,7 +115,15 @@ export class FIRFilter implements Filter {
   }
 }
 
-/** A class that applies a FIR filter using successive Fourier transforms. */
+/**
+ * A class that applies a FIR filter using successive Fourier transforms (overlap-save.)
+ *
+ * You can use the length of the coefficients to trade off CPU time vs latency.
+ * - When the number of coefficients is (2^n)-1, you get the least latency [3*2^(n-1)+1]
+ * but the most CPU usage because almost half of the FFT result is thrown away.
+ * - When the number of coefficients is (2^n)+1, you get the most latency [7*2^(n-1)]
+ * but the least CPU usage because only a quarter of the FFT result is thrown away.
+ */
 export class FFTFilter implements Filter {
   constructor(coefs: Float32Array) {
     this.fft = FFT.ofLength(coefs.length * 2);
@@ -171,7 +179,7 @@ export class FFTFilter implements Filter {
     this.output.fill(0, this.fft.length - this.overlap);
   }
 
-  clone(): Filter {
+  clone(): FFTFilter {
     let newFilter = new FFTFilter(new Float32Array(this.overlap + 1));
     newFilter.kernel = this.kernel;
     return newFilter;
