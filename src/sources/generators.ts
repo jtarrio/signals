@@ -20,7 +20,7 @@ import { SampleGenerator } from "./generated.js";
 export function tone(
   freq: number,
   amplitude: number,
-  phase?: number
+  phase?: number,
 ): SampleGenerator {
   if (phase === undefined) phase = 0;
   return (
@@ -28,7 +28,7 @@ export function tone(
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     const delta = (freq - centerFreq) / rate;
     if (delta >= 0.5 || -0.5 >= delta) {
@@ -56,7 +56,7 @@ export function tone(
 /** Returns a generator for noise with a given maximum amplitude. */
 export function noise(
   amplitude: number,
-  random?: () => number
+  random?: () => number,
 ): SampleGenerator {
   if (random === undefined) random = Math.random;
   return (
@@ -64,7 +64,7 @@ export function noise(
     _rate: number,
     _centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     for (let i = 0; i < I.length; ++i) {
       let r = amplitude * Math.sqrt(random());
@@ -83,7 +83,7 @@ export function sum(...generators: SampleGenerator[]): SampleGenerator {
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     I.fill(0);
     Q.fill(0);
@@ -105,7 +105,7 @@ export function sum(...generators: SampleGenerator[]): SampleGenerator {
  */
 export function product(
   carrier: SampleGenerator,
-  signal: SampleGenerator
+  signal: SampleGenerator,
 ): SampleGenerator {
   let pool = new IqPool(1, 65536);
   return (
@@ -113,7 +113,7 @@ export function product(
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     let [J, R] = pool.get(I.length);
     carrier(sample, rate, centerFreq, I, Q);
@@ -134,14 +134,14 @@ export function product(
  */
 export function amplify(
   gain: number,
-  signal: SampleGenerator
+  signal: SampleGenerator,
 ): SampleGenerator {
   return (
     sample: number,
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     signal(sample, rate, centerFreq, I, Q);
     for (let i = 0; i < I.length; ++i) {
@@ -158,7 +158,7 @@ export function real(signal: SampleGenerator): SampleGenerator {
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     signal(sample, rate, centerFreq, I, Q);
     Q.fill(0);
@@ -174,7 +174,7 @@ export function real(signal: SampleGenerator): SampleGenerator {
 export function modulateAM(
   carrierFreq: number,
   amplitude: number,
-  signal: SampleGenerator
+  signal: SampleGenerator,
 ): SampleGenerator {
   let pool = new IqPool(1, 65536);
   const carrier = tone(carrierFreq, amplitude);
@@ -183,7 +183,7 @@ export function modulateAM(
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     const delta = (carrierFreq - centerFreq) / rate;
     if (delta >= 0.5 || -0.5 >= delta) {
@@ -212,7 +212,7 @@ export function modulateFM(
   carrierFreq: number,
   maximumDeviation: number,
   amplitude: number,
-  signal: SampleGenerator
+  signal: SampleGenerator,
 ): SampleGenerator {
   let pool = new IqPool(1, 65536);
   let phase = 0;
@@ -221,7 +221,7 @@ export function modulateFM(
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     const delta = (carrierFreq - centerFreq) / rate;
     if (delta >= 0.5 || -0.5 >= delta) {
@@ -254,7 +254,7 @@ export function modulateFM(
  */
 function preemphasis(
   tcMicros: number,
-  signal: SampleGenerator
+  signal: SampleGenerator,
 ): SampleGenerator {
   let prevRate: number | undefined;
   let filterI: Preemphasis | undefined;
@@ -264,7 +264,7 @@ function preemphasis(
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     if (prevRate !== rate) {
       prevRate = rate;
@@ -295,7 +295,7 @@ function cache(signal: SampleGenerator): SampleGenerator {
     rate: number,
     centerFreq: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ) => {
     if (
       lastSample !== sample ||
@@ -321,17 +321,17 @@ function cache(signal: SampleGenerator): SampleGenerator {
  */
 export function wbfmSignal(
   mono: SampleGenerator,
-  tcMicros?: number
+  tcMicros?: number,
 ): SampleGenerator;
 export function wbfmSignal(
   left: SampleGenerator,
   right: SampleGenerator,
-  tcMicros?: number
+  tcMicros?: number,
 ): SampleGenerator;
 export function wbfmSignal(
   left: SampleGenerator,
   rightOrTcMicros?: SampleGenerator | number,
-  tcMicros?: number
+  tcMicros?: number,
 ): SampleGenerator {
   let right: SampleGenerator | undefined;
   if (typeof rightOrTcMicros === "number") {
@@ -350,4 +350,22 @@ export function wbfmSignal(
   const apb = amplify(0.45, sum(l, r));
   const amb = amplify(0.45, sum(l, amplify(-1, r)));
   return sum(apb, pilot, product(amb, shift));
+}
+
+/** Returns a generator that quantizes a generated signal with the given number of bits. */
+export function quantized(signal: SampleGenerator, bits: number) {
+  return (
+    firstSample: number,
+    sampleRate: number,
+    centerFrequency: number,
+    I: Float32Array,
+    Q: Float32Array,
+  ) => {
+    signal(firstSample, sampleRate, centerFrequency, I, Q);
+    const f = (1 << bits) - 1;
+    for (let i = 0; i < I.length; ++i) {
+      I[i] = (2 * Math.round(((I[i] + 1) * f) / 2)) / f - 1;
+      Q[i] = (2 * Math.round(((Q[i] + 1) * f) / 2)) / f - 1;
+    }
+  };
 }
