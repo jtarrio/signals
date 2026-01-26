@@ -31,7 +31,7 @@ export type SampleGenerator = (
 ) => void;
 
 /** A SignalSource that gets samples from a SampleGenerator function in real time. */
-export class GeneratedSource extends RealTimeSource {
+export class GeneratedSource<ParameterKey extends string = string>  extends RealTimeSource<ParameterKey> {
   constructor(private generator: SampleGenerator) {
     super();
   }

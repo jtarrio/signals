@@ -24,7 +24,7 @@ import { PendingReadRing } from "./read_ring.js";
  * Then, at periodic intervals, it checks if there are any pending reads and resolves
  * them with the contents of the buffer, refilling it as needed.
  */
-export class RealTimeSource implements SignalSource {
+export class RealTimeSource<ParameterKey extends string = string> implements SignalSource<ParameterKey> {
   constructor() {
     this.sampleRate = 1024000;
     this.centerFrequency = 0;
@@ -59,7 +59,7 @@ export class RealTimeSource implements SignalSource {
     Q.fill(0);
   }
 
-  async setParameter<V>(_property: string, _value: V): Promise<void | V> {}
+  async setParameter<V>(_property: ParameterKey, _value: V): Promise<void | V> {}
 
   async setSampleRate(sampleRate: number) {
     this.sampleRate = sampleRate;
