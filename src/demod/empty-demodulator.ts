@@ -18,7 +18,7 @@ import { AudioPlayer } from "../players/audioplayer.js";
 import { SampleBlock } from "../radio/sample_block.js";
 import { SampleReceiver } from "../radio/sample_receiver.js";
 
-type DemodulatorOptions = {
+export type DemodulatorOptions = {
   /**
    * The player to use. If undefined, an AudioPlayer will be used.
    */

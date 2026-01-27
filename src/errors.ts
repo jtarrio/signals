@@ -47,6 +47,6 @@ export enum RadioErrorType {
   DemodulationError,
 }
 
-type RadioErrorOptions = {
+export type RadioErrorOptions = {
   cause?: any;
 };
