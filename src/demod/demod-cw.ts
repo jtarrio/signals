@@ -14,7 +14,13 @@
 
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
-import { AGC, FIRFilter, FrequencyShifter } from "../dsp/filters.js";
+import {
+  AGC,
+  FFTFilter,
+  FIRFilter,
+  FrequencyShifter,
+  IqFilter,
+} from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -30,6 +36,8 @@ export type OptionsCW = {
   downsamplerTaps?: number;
   /** Number of taps for the audio filter. Must be an odd number. 351 by default. */
   audioTaps?: number;
+  /** Filter via FFT instead of convolution. Uses less CPU, but generates more latency. */
+  useFftFilter?: boolean;
 };
 
 /** A demodulator for continuous wave signals. */
@@ -44,7 +52,7 @@ export class DemodCW implements Demod<ModeCW> {
     inRate: number,
     private outRate: number,
     private mode: ModeCW,
-    options?: OptionsCW
+    options?: OptionsCW,
   ) {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.audioTaps = options?.audioTaps || 351;
@@ -54,10 +62,11 @@ export class DemodCW implements Demod<ModeCW> {
     const kernel = makeLowPassKernel(
       outRate,
       mode.bandwidth / 2,
-      this.audioTaps
+      this.audioTaps,
     );
-    this.filterI = new FIRFilter(kernel);
-    this.filterQ = new FIRFilter(kernel);
+    this.filter = new IqFilter(
+      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
+    );
     this.toneShifter = new FrequencyShifter(outRate);
     this.toneFrequency = toneFrequency;
     this.agc = new AGC(outRate, 10);
@@ -67,8 +76,7 @@ export class DemodCW implements Demod<ModeCW> {
   private audioTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filterI: FIRFilter;
-  private filterQ: FIRFilter;
+  private filter: IqFilter;
   private toneShifter: FrequencyShifter;
   private toneFrequency: number;
   private agc: AGC;
@@ -83,23 +91,21 @@ export class DemodCW implements Demod<ModeCW> {
     const kernel = makeLowPassKernel(
       this.outRate,
       mode.bandwidth / 2,
-      this.audioTaps
+      this.audioTaps,
     );
-    this.filterI.setCoefficients(kernel);
-    this.filterQ.setCoefficients(kernel);
+    this.filter.setCoefficients(kernel);
   }
 
   /** Demodulates the given I/Q samples into the real output. */
   demodulate(
     samplesI: Float32Array,
     samplesQ: Float32Array,
-    freqOffset: number
+    freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
     const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
-    this.filterI.inPlace(I);
-    this.filterQ.inPlace(Q);
+    this.filter.inPlace(I, Q);
     let signalPower = (getPower(I, Q) * this.outRate) / this.mode.bandwidth;
     this.toneShifter.inPlace(I, Q, this.toneFrequency);
     this.agc.inPlace(I);

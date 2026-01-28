@@ -16,7 +16,14 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator, StereoSeparator } from "../dsp/demodulators.js";
-import { Deemphasis, FIRFilter, FrequencyShifter } from "../dsp/filters.js";
+import {
+  Deemphasis,
+  FFTFilter,
+  Filter,
+  FIRFilter,
+  FrequencyShifter,
+  IqFilter,
+} from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler, RealDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -38,6 +45,8 @@ export type OptionsWBFM = {
   rfTaps?: number;
   /** Number of taps for the audio filter. Must be an odd number. 41 by default. */
   audioTaps?: number;
+  /** Filter via FFT instead of convolution. Uses less CPU, but generates more latency. */
+  useFftFilter?: boolean;
 };
 
 /** A demodulator for wideband FM signals. */
@@ -52,7 +61,7 @@ export class DemodWBFM implements Demod<ModeWBFM> {
     inRate: number,
     outRate: number,
     private mode: ModeWBFM,
-    options?: OptionsWBFM
+    options?: OptionsWBFM,
   ) {
     let interRate = Math.min(inRate, 336000);
     this.stage1 = new DemodWBFMStage1(inRate, interRate, mode, options);
@@ -82,7 +91,7 @@ export class DemodWBFM implements Demod<ModeWBFM> {
   demodulate(
     samplesI: Float32Array,
     samplesQ: Float32Array,
-    freqOffset: number
+    freqOffset: number,
   ): Demodulated {
     let o1 = this.stage1.demodulate(samplesI, samplesQ, freqOffset);
     let o2 = this.stage2.demodulate(o1.left);
@@ -108,7 +117,7 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
     inRate: number,
     private outRate: number,
     private mode: ModeWBFM,
-    options?: OptionsWBFM
+    options?: OptionsWBFM,
   ) {
     const maxF = 75000;
     const downsamplerTaps = options?.downsamplerTaps || 151;
@@ -118,19 +127,19 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
       this.downsampler = new ComplexDownsampler(
         inRate,
         outRate,
-        downsamplerTaps
+        downsamplerTaps,
       );
     }
     const kernel = makeLowPassKernel(outRate, maxF, rfTaps);
-    this.filterI = new FIRFilter(kernel);
-    this.filterQ = new FIRFilter(kernel);
+    this.filter = new IqFilter(
+      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
+    );
     this.demodulator = new FMDemodulator(maxF / outRate);
   }
 
   private shifter: FrequencyShifter;
   private downsampler?: ComplexDownsampler;
-  private filterI: FIRFilter;
-  private filterQ: FIRFilter;
+  private filter: IqFilter;
   private demodulator: FMDemodulator;
 
   getMode(): ModeWBFM {
@@ -151,15 +160,14 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
   demodulate(
     samplesI: Float32Array,
     samplesQ: Float32Array,
-    freqOffset: number
+    freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
     let [I, Q] = this.downsampler
       ? this.downsampler.downsample(samplesI, samplesQ)
       : [samplesI, samplesQ];
     let allPower = getPower(I, Q);
-    this.filterI.inPlace(I);
-    this.filterQ.inPlace(Q);
+    this.filter.inPlace(I, Q);
     let signalPower = (getPower(I, Q) * this.outRate) / 150000;
     this.demodulator.demodulate(I, Q, I);
     return {
@@ -187,7 +195,7 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
     inRate: number,
     outRate: number,
     private mode: ModeWBFM,
-    options?: OptionsWBFM
+    options?: OptionsWBFM,
   ) {
     const pilotF = 19000;
     const deemphTc =

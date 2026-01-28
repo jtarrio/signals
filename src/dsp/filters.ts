@@ -225,6 +225,39 @@ export class FFTFilter implements Filter {
   }
 }
 
+/** A filter that works on an IQ signal. */
+export class IqFilter {
+  constructor(filter: FFTFilter | FIRFilter) {
+    this.filterI = filter.clone();
+    this.filterQ = filter.clone();
+  }
+
+  private filterI: FFTFilter | FIRFilter;
+  private filterQ: FFTFilter | FIRFilter;
+
+  /** Changes the filters' coefficients. */
+  setCoefficients(coefs: Float32Array) {
+    this.filterI.setCoefficients(coefs);
+    this.filterQ.setCoefficients(coefs);
+  }
+
+  /** Returns a newly initialized clone of this filter. */
+  clone(): IqFilter {
+    return new IqFilter(this.filterI);
+  }
+
+  /** Returns this filter's delay, in samples. */
+  getDelay(): number {
+    return this.filterI.getDelay();
+  }
+
+  /** Applies the filter to the input samples, in place. */
+  inPlace(I: Float32Array, Q: Float32Array) {
+    this.filterI.inPlace(I);
+    this.filterQ.inPlace(Q);
+  }
+}
+
 /** A class to apply a delay to a sequence of samples. */
 export class DelayFilter implements Filter {
   /** @param delay The number of samples to delay the signal by */

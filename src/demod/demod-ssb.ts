@@ -16,7 +16,13 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { Sideband, SSBDemodulator } from "../dsp/demodulators.js";
-import { FrequencyShifter, AGC, FIRFilter } from "../dsp/filters.js";
+import {
+  FrequencyShifter,
+  AGC,
+  FIRFilter,
+  FFTFilter,
+  Filter,
+} from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -36,6 +42,8 @@ export type OptionsSSB = {
   rfTaps?: number;
   /** Number of taps for the Hilbert filter. Must be an odd number. 151 by default. */
   hilbertTaps?: number;
+  /** Filter via FFT instead of convolution. Uses less CPU, but generates more latency. */
+  useFftFilter?: boolean;
 };
 
 /** A demodulator for single-sideband modulated signals. */
@@ -49,7 +57,7 @@ export class DemodSSB implements Demod<ModeSSB> {
     inRate: number,
     private outRate: number,
     private mode: ModeSSB,
-    options?: OptionsSSB
+    options?: OptionsSSB,
   ) {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.rfTaps = options?.rfTaps || 151;
@@ -59,12 +67,15 @@ export class DemodSSB implements Demod<ModeSSB> {
     const kernel = makeLowPassKernel(
       this.outRate,
       mode.bandwidth / 2,
-      this.rfTaps
+      this.rfTaps,
     );
-    this.filter = new FIRFilter(kernel);
+    this.filter = options?.useFftFilter
+      ? new FFTFilter(kernel)
+      : new FIRFilter(kernel);
     this.demodulator = new SSBDemodulator(
       mode.scheme == "USB" ? Sideband.Upper : Sideband.Lower,
-      hilbertTaps
+      hilbertTaps,
+      { useFftFilter: options?.useFftFilter },
     );
     this.agc = new AGC(outRate, 3);
     this.outPool = new Float32Pool(1);
@@ -73,7 +84,7 @@ export class DemodSSB implements Demod<ModeSSB> {
   private rfTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filter: FIRFilter;
+  private filter: FIRFilter | FFTFilter;
   private demodulator: SSBDemodulator;
   private agc: AGC;
   private outPool: Float32Pool;
@@ -87,11 +98,11 @@ export class DemodSSB implements Demod<ModeSSB> {
     const kernel = makeLowPassKernel(
       this.outRate,
       mode.bandwidth / 2,
-      this.rfTaps
+      this.rfTaps,
     );
     this.filter.setCoefficients(kernel);
     this.demodulator.setSideband(
-      mode.scheme == "USB" ? Sideband.Upper : Sideband.Lower
+      mode.scheme == "USB" ? Sideband.Upper : Sideband.Lower,
     );
   }
 
@@ -105,7 +116,7 @@ export class DemodSSB implements Demod<ModeSSB> {
   demodulate(
     samplesI: Float32Array,
     samplesQ: Float32Array,
-    freqOffset: number
+    freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
     const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);

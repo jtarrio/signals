@@ -15,16 +15,10 @@
 
 import { Float32Pool } from "./buffers.js";
 import { makeLowPassKernel } from "./coefficients.js";
-import { FFTFilter, FIRFilter } from "./filters.js";
-
-/** Options for downsamplers. */
-export type DownsamplerOptions = {
-  /** Use a FFTFilter instead of a FIRFilter. */
-  useFftFilter?: boolean;
-};
+import { FIRFilter } from "./filters.js";
 
 /** A class to convert the input to a lower sample rate using a FIR filter. */
-class FirDownsampler {
+class Downsampler {
   /**
    * @param ratio The ratio of input/output sample rates.
    * @param kernel The coefficients for the low-pass filter.
@@ -61,60 +55,16 @@ class FirDownsampler {
   }
 }
 
-/** A class to convert the input to a lower sample rate using a FFT filter. */
-class FftDownsampler {
-  /**
-   * @param ratio The ratio of input/output sample rates.
-   * @param kernel The coefficients for the low-pass filter.
-   */
-  constructor(
-    private ratio: number,
-    filter: FFTFilter,
-  ) {
-    this.filter = filter.clone();
-    this.pool = new Float32Pool(4);
-  }
-
-  private filter: FFTFilter;
-  private pool: Float32Pool;
-
-  /**
-   * Returns a downsampled version of the given samples.
-   * @param samples The sample block to downsample.
-   * @returns The downsampled block.
-   */
-  downsample(samples: Float32Array): Float32Array {
-    const ratio = this.ratio;
-    const len = Math.floor(samples.length / ratio);
-    let input = this.pool.get(samples.length);
-    input.set(samples);
-    this.filter.inPlace(input);
-    let output = this.pool.get(len);
-    for (let i = 0; i < len; ++i) {
-      output[i] = input[Math.floor(i * ratio)];
-    }
-    return output;
-  }
-
-  getDelay(): number {
-    return this.filter.getDelay();
-  }
-}
-
 function getDownsampler(
   inRate: number,
   outRate: number,
   filterSpec: number | Float32Array,
-  options?: DownsamplerOptions,
-): FirDownsampler | FftDownsampler {
+): Downsampler {
   let ratio = inRate / outRate;
   let filter = filterSpec;
   if (typeof filter === "number")
     filter = makeLowPassKernel(inRate, outRate / 2, filter);
-  if (options?.useFftFilter) {
-    return new FftDownsampler(ratio, new FFTFilter(filter));
-  }
-  return new FirDownsampler(ratio, new FIRFilter(filter));
+  return new Downsampler(ratio, new FIRFilter(filter));
 }
 
 /** A class to convert a real input to a lower sample rate. */
@@ -125,34 +75,23 @@ export class RealDownsampler {
    * @param filterLen The size of the low-pass filter.
    * @param options Options for the downsampler.
    */
-  constructor(
-    inRate: number,
-    outRate: number,
-    filterLen: number,
-    options?: DownsamplerOptions,
-  );
+  constructor(inRate: number, outRate: number, filterLen: number);
   /**
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param kernel The kernel to apply to the signal before downsampling.
    * @param options Options for the downsampler.
    */
-  constructor(
-    inRate: number,
-    outRate: number,
-    kernel: Float32Array,
-    options?: DownsamplerOptions,
-  );
+  constructor(inRate: number, outRate: number, kernel: Float32Array);
   constructor(
     inRate: number,
     outRate: number,
     filterSpec: number | Float32Array,
-    options?: DownsamplerOptions,
   ) {
-    this.downsampler = getDownsampler(inRate, outRate, filterSpec, options);
+    this.downsampler = getDownsampler(inRate, outRate, filterSpec);
   }
 
-  private downsampler: FirDownsampler | FftDownsampler;
+  private downsampler: Downsampler;
 
   /**
    * @param input The signal in the original sample rate.
@@ -175,36 +114,25 @@ export class ComplexDownsampler {
    * @param filterLen The size of the low-pass filter.
    * @param options Options for the downsampler.
    */
-  constructor(
-    inRate: number,
-    outRate: number,
-    filterLen: number,
-    options?: DownsamplerOptions,
-  );
+  constructor(inRate: number, outRate: number, filterLen: number);
   /**
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param kernel The kernel to apply to the signal before downsampling.
    * @param options Options for the downsampler.
    */
-  constructor(
-    inRate: number,
-    outRate: number,
-    kernel: Float32Array,
-    options?: DownsamplerOptions,
-  );
+  constructor(inRate: number, outRate: number, kernel: Float32Array);
   constructor(
     inRate: number,
     outRate: number,
     filterSpec: number | Float32Array,
-    options?: DownsamplerOptions,
   ) {
-    this.downsamplerI = getDownsampler(inRate, outRate, filterSpec, options);
-    this.downsamplerQ = getDownsampler(inRate, outRate, filterSpec, options);
+    this.downsamplerI = getDownsampler(inRate, outRate, filterSpec);
+    this.downsamplerQ = getDownsampler(inRate, outRate, filterSpec);
   }
 
-  private downsamplerI: FirDownsampler | FftDownsampler;
-  private downsamplerQ: FirDownsampler | FftDownsampler;
+  private downsamplerI: Downsampler;
+  private downsamplerQ: Downsampler;
 
   /**
    * @param I The signal's real component.

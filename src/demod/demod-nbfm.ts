@@ -16,7 +16,13 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator } from "../dsp/demodulators.js";
-import { FIRFilter, FrequencyShifter } from "../dsp/filters.js";
+import {
+  FFTFilter,
+  Filter,
+  FIRFilter,
+  FrequencyShifter,
+  IqFilter,
+} from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -30,6 +36,8 @@ export type OptionsNBFM = {
   downsamplerTaps?: number;
   /** Number of taps for the RF filter. Must be an odd number. 151 by default. */
   rfTaps?: number;
+  /** Filter via FFT instead of convolution. Uses less CPU, but generates more latency. */
+  useFftFilter?: boolean;
 };
 
 /** A demodulator for narrowband FM signals. */
@@ -44,15 +52,16 @@ export class DemodNBFM implements Demod<ModeNBFM> {
     inRate: number,
     private outRate: number,
     private mode: ModeNBFM,
-    options?: OptionsNBFM
+    options?: OptionsNBFM,
   ) {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
     this.downsampler = new ComplexDownsampler(inRate, outRate, downsamplerTaps);
     const kernel = makeLowPassKernel(outRate, mode.maxF, this.rfTaps);
-    this.filterI = new FIRFilter(kernel);
-    this.filterQ = new FIRFilter(kernel);
+    this.filter = new IqFilter(
+      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
+    );
     this.demodulator = new FMDemodulator(mode.maxF / outRate);
     this.outPool = new Float32Pool(1);
   }
@@ -60,8 +69,7 @@ export class DemodNBFM implements Demod<ModeNBFM> {
   private rfTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filterI: FIRFilter;
-  private filterQ: FIRFilter;
+  private filter: IqFilter;
   private demodulator: FMDemodulator;
   private outPool: Float32Pool;
 
@@ -72,8 +80,7 @@ export class DemodNBFM implements Demod<ModeNBFM> {
   setMode(mode: ModeNBFM) {
     this.mode = mode;
     const kernel = makeLowPassKernel(this.outRate, mode.maxF, this.rfTaps);
-    this.filterI.setCoefficients(kernel);
-    this.filterQ.setCoefficients(kernel);
+    this.filter.setCoefficients(kernel);
     this.demodulator.setMaxDeviation(mode.maxF / this.outRate);
   }
 
@@ -87,13 +94,12 @@ export class DemodNBFM implements Demod<ModeNBFM> {
   demodulate(
     samplesI: Float32Array,
     samplesQ: Float32Array,
-    freqOffset: number
+    freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
     const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
-    this.filterI.inPlace(I);
-    this.filterQ.inPlace(Q);
+    this.filter.inPlace(I, Q);
     let signalPower = (getPower(I, Q) * this.outRate) / (this.mode.maxF * 2);
     this.demodulator.demodulate(I, Q, I);
     let right = this.outPool.get(I.length);
