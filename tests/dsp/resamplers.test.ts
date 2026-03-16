@@ -51,18 +51,6 @@ describe("RealDownsampler", () => {
     );
   });
 
-  test("FFT", () => {
-    let downsampler = new RealDownsampler(8000, 800, 29, {
-      useFftFilter: true,
-    });
-    let output = downsampler.downsample(input);
-
-    assert.approximately(downsampler.getDelay(), 5, 1e-4);
-    assert.isAtMost(
-      rmsd(output.subarray(40, 80), expected.subarray(35, 75)),
-      0.001,
-    );
-  });
 });
 
 describe("ComplexDownsampler", () => {
@@ -95,17 +83,5 @@ describe("ComplexDownsampler", () => {
     );
   });
 
-  test("FFT", () => {
-    let downsampler = new ComplexDownsampler(origSampleRate, sampleRate, 29, {useFftFilter: true});
-    let output = downsampler.downsample(input[0], input[1]);
-
-    assert.approximately(downsampler.getDelay(), 5, 1e-4);
-    assert.isAtMost(
-      iqRmsd(
-        iqSubarray(output, len / 2),
-        iqSubarray(expected, len / 2 - 5, len - 5),
-      ),
-      0.0001,
-    );
-  });
 });
+

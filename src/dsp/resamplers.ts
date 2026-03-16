@@ -51,7 +51,11 @@ class Downsampler {
   }
 
   getDelay(): number {
-    return this.filter.getDelay();
+    return this.filter.getDelay() / this.ratio;
+  }
+
+  clone(): Downsampler {
+    return new Downsampler(this.ratio, this.filter);
   }
 }
 
@@ -73,14 +77,12 @@ export class RealDownsampler {
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param filterLen The size of the low-pass filter.
-   * @param options Options for the downsampler.
    */
   constructor(inRate: number, outRate: number, filterLen: number);
   /**
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param kernel The kernel to apply to the signal before downsampling.
-   * @param options Options for the downsampler.
    */
   constructor(inRate: number, outRate: number, kernel: Float32Array);
   constructor(
@@ -112,14 +114,12 @@ export class ComplexDownsampler {
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param filterLen The size of the low-pass filter.
-   * @param options Options for the downsampler.
    */
   constructor(inRate: number, outRate: number, filterLen: number);
   /**
    * @param inRate The input sample rate.
    * @param outRate The output sample rate.
    * @param kernel The kernel to apply to the signal before downsampling.
-   * @param options Options for the downsampler.
    */
   constructor(inRate: number, outRate: number, kernel: Float32Array);
   constructor(
@@ -128,7 +128,7 @@ export class ComplexDownsampler {
     filterSpec: number | Float32Array,
   ) {
     this.downsamplerI = getDownsampler(inRate, outRate, filterSpec);
-    this.downsamplerQ = getDownsampler(inRate, outRate, filterSpec);
+    this.downsamplerQ = this.downsamplerI.clone();
   }
 
   private downsamplerI: Downsampler;

@@ -597,8 +597,9 @@ export class FrequencyShifter {
       cosine = cosine * deltaCos - sine * deltaSin;
       sine = newSine;
     }
-    this.cosine = cosine;
-    this.sine = sine;
+    const m = Math.hypot(cosine, sine);
+    this.cosine = cosine / m;
+    this.sine = sine / m;
   }
 }
 
