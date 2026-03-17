@@ -34,6 +34,7 @@ export class FIRFilter implements Filter {
     this.center = Math.floor(this.coefs.length / 2);
     this.pool = new Float32Pool(2, 2 * this.offset);
     this.curSamples = this.pool.get(this.offset);
+    this.get = this.isSymmetric() ? this.getS : this.getNS;
   }
 
   private offset: number;
@@ -47,6 +48,7 @@ export class FIRFilter implements Filter {
     this.offset = this.coefs.length - 1;
     this.center = Math.floor(this.coefs.length / 2);
     this.curSamples = this.pool.get(this.offset);
+    this.get = this.isSymmetric() ? this.getS : this.getNS;
     this.loadSamples(oldSamples);
   }
 
@@ -85,12 +87,17 @@ export class FIRFilter implements Filter {
 
   /**
    * Returns a filtered sample.
-   * Be very careful when you modify this function. About 85% of the total execution
-   * time is spent here, so performance is critical.
    * @param index The index of the sample to return, corresponding
    *     to the same index in the latest sample block loaded via loadSamples().
    */
-  get(index: number) {
+  get: (index: number) => number = this.getNS;
+
+  /**
+   * Version of get() for non-symmetrical coefficients.
+   * Be very careful when you modify this function. About 85% of the total execution
+   * time is spent here, so performance is critical.
+   */
+  private getNS(index: number): number {
     let i = 0;
     let out = 0;
     let len = this.coefs.length;
@@ -112,6 +119,56 @@ export class FIRFilter implements Filter {
       out += this.coefs[i++] * this.curSamples[index++];
     }
     return out;
+  }
+
+  /** Version of get() for symmetric coefficients. */
+  private getS(index: number): number {
+    let i = 0;
+    let out = 0;
+    let hlen = this.coefs.length / 2;
+    let fhlen = Math.floor(this.coefs.length / 2);
+    let lo = index;
+    let hi = index + this.coefs.length - 1;
+    let hlen4 = 4 * Math.floor(hlen / 4);
+    while (i < hlen4) {
+      out +=
+        this.coefs[i + 0] *
+          (this.curSamples[lo + 0] + this.curSamples[hi - 0]) +
+        this.coefs[i + 1] *
+          (this.curSamples[lo + 1] + this.curSamples[hi - 1]) +
+        this.coefs[i + 2] *
+          (this.curSamples[lo + 2] + this.curSamples[hi - 2]) +
+        this.coefs[i + 3] * (this.curSamples[lo + 3] + this.curSamples[hi - 3]);
+      i += 4;
+      lo += 4;
+      hi -= 4;
+    }
+    let hlen2 = 2 * Math.floor(hlen / 2);
+    while (i < hlen2) {
+      out +=
+        this.coefs[i + 0] *
+          (this.curSamples[lo + 0] + this.curSamples[hi - 0]) +
+        this.coefs[i + 1] * (this.curSamples[lo + 1] + this.curSamples[hi - 1]);
+      i += 2;
+      lo += 2;
+      hi -= 2;
+    }
+    while (i < fhlen) {
+      out += this.coefs[i++] * (this.curSamples[lo++] + this.curSamples[hi--]);
+    }
+    if (fhlen != hlen) {
+      out += this.coefs[i++] * this.curSamples[lo++];
+    }
+    return out;
+  }
+
+  private isSymmetric(): boolean {
+    const len = this.coefs.length - 1;
+    const hlen = Math.floor(this.coefs.length / 2);
+    for (let i = 0; i < hlen; ++i) {
+      if (this.coefs[i] !== this.coefs[len - i]) return false;
+    }
+    return true;
   }
 }
 

@@ -72,32 +72,74 @@ test("FIRFilter", () => {
 
   assert.deepEqual(
     conv(new Float32Array([1, 0, 0, 0, 0, 0])),
-    new Float32Array([16, 9, 5, 2, 1, 0])
+    new Float32Array([16, 9, 5, 2, 1, 0]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 1, 0, 0, 0, 0])),
-    new Float32Array([0, 16, 9, 5, 2, 1])
+    new Float32Array([0, 16, 9, 5, 2, 1]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 0, 1, 0, 0, 0])),
-    new Float32Array([0, 0, 16, 9, 5, 2])
+    new Float32Array([0, 0, 16, 9, 5, 2]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 0, 0, 1, 0, 0])),
-    new Float32Array([0, 0, 0, 16, 9, 5])
+    new Float32Array([0, 0, 0, 16, 9, 5]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 0, 0, 0, 1, 0])),
-    new Float32Array([0, 0, 0, 0, 16, 9])
+    new Float32Array([0, 0, 0, 0, 16, 9]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 0, 0, 0, 0, 1])),
-    new Float32Array([0, 0, 0, 0, 0, 16])
+    new Float32Array([0, 0, 0, 0, 0, 16]),
   );
   assert.deepEqual(
     conv(new Float32Array([0, 1, 0, 0, 1, 0])),
-    new Float32Array([0, 16, 9, 5, 18, 10])
+    new Float32Array([0, 16, 9, 5, 18, 10]),
   );
+});
+
+test("FIRFilter symmetry", () => {
+  for (let coefs of [
+    new Float32Array([1, 2, 3, 2, 1]),
+    new Float32Array([0, 1, 2, 3, 2, 1]),
+  ]) {
+    const conv = (signal: Float32Array) => {
+      let filter = new FIRFilter(coefs);
+      filter.inPlace(signal);
+      return signal;
+    };
+
+    assert.deepEqual(
+      conv(new Float32Array([1, 0, 0, 0, 0, 0])),
+      new Float32Array([1, 2, 3, 2, 1, 0]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 1, 0, 0, 0, 0])),
+      new Float32Array([0, 1, 2, 3, 2, 1]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 0, 1, 0, 0, 0])),
+      new Float32Array([0, 0, 1, 2, 3, 2]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 0, 0, 1, 0, 0])),
+      new Float32Array([0, 0, 0, 1, 2, 3]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 0, 0, 0, 1, 0])),
+      new Float32Array([0, 0, 0, 0, 1, 2]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 0, 0, 0, 0, 1])),
+      new Float32Array([0, 0, 0, 0, 0, 1]),
+    );
+    assert.deepEqual(
+      conv(new Float32Array([0, 1, 0, 0, 1, 0])),
+      new Float32Array([0, 1, 2, 3, 3, 3]),
+    );
+  }
 });
 
 test("STFTFilter", () => {
