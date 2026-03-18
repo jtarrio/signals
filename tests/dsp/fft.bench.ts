@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { bench, describe } from "vitest";
-import { FFT } from "../../src/dsp/fft.js";
+import { FFT, RealFFT } from "../../src/dsp/fft.js";
 
 describe("Fast Fourier Transform", () => {
   const sampleRate = 192000;
@@ -27,6 +27,26 @@ describe("Fast Fourier Transform", () => {
   for (let l of [64, 256, 1024, 4096]) {
     describe(String(l), () => {
       bench("FFT", run(FFT.ofLength(l)));
+    });
+  }
+});
+
+describe("Real Fast Fourier Transform", () => {
+  const sampleRate = 192000;
+  const I = new Float32Array(256 * 1024).map((_) => Math.random());
+
+  const run = (fft: FFT) => () => {
+    fft.transform(I);
+  };
+
+  const runReal = (fft: RealFFT) => () => {
+    fft.transform(I);
+  };
+
+  for (let l of [64, 256, 1024, 4096]) {
+    describe(String(l), () => {
+      bench("FFT", run(FFT.ofLength(l)));
+      bench("RealFFT", runReal(RealFFT.ofLength(l)));
     });
   }
 });

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Float32RingBuffer, IqPool } from "./buffers.js";
+import { Float32Pool, Float32RingBuffer, IqPool } from "./buffers.js";
 
 /** Fast Fourier Transform implementation. */
 
@@ -242,6 +242,118 @@ function doFastTransform(
   }
 }
 
+/** Fast Fourier Transform and reverse transform for real signals. */
+export class RealFFT {
+  static ofLength(minimumLength: number): RealFFT {
+    return new RealFFT(actualLength(minimumLength));
+  }
+
+  private constructor(public length: number) {
+    this.halfFft = FFT.ofLength(length / 2);
+    this.out = new IqPool(4, length);
+    this.outReal = new Float32Pool(4, length);
+    this.coefReal = new Float32Array(length / 2 + 1);
+    this.coefImag = new Float32Array(length / 2 + 1);
+    for (let k = 0; k <= length / 2; ++k) {
+      const angle = (-2 * Math.PI * k) / length;
+      this.coefReal[k] = Math.cos(angle);
+      this.coefImag[k] = Math.sin(angle);
+    }
+    this.copyEven = new Float32Array(length / 2);
+    this.copyOdd = new Float32Array(length / 2);
+  }
+
+  private halfFft: FFT;
+  private out: IqPool;
+  private outReal: Float32Pool;
+  private coefReal: Float32Array;
+  private coefImag: Float32Array;
+  private copyEven: Float32Array;
+  private copyOdd: Float32Array;
+
+  /**
+   * Transforms the given real time-domain input.
+   * @param real An array of real numbers.
+   * @return The output of the transform.
+   */
+  transform(real: Float32Array): FFTOutput {
+    const coefReal = this.coefReal;
+    const coefImag = this.coefImag;
+    const even = this.copyEven;
+    const odd = this.copyOdd;
+
+    const len = this.length;
+    const hlen = this.length / 2;
+    for (let i = 0; i < hlen; ++i) {
+      even[i] = real[2 * i];
+      odd[i] = real[2 * i + 1];
+    }
+    const [fftReal, fftImag] = this.halfFft.transform(even, odd);
+    const out = this.out.get(len);
+    const outReal = out[0];
+    const outImag = out[1];
+    outReal[0] = (fftReal[0] + fftImag[0]) * 0.5;
+    outImag[0] = 0;
+    outReal[hlen] = (fftReal[0] - fftImag[0]) * 0.5;
+    outImag[hlen] = 0;
+    for (let i = 1; i < hlen; ++i) {
+      const cr = coefReal[i];
+      const ci = coefImag[i];
+      const sr = fftReal[i] + fftReal[hlen - i];
+      const si = fftImag[i] - fftImag[hlen - i];
+      const dr = fftReal[i] - fftReal[hlen - i];
+      const di = fftImag[i] + fftImag[hlen - i];
+      const xr = (sr + cr * di + ci * dr) * 0.25;
+      const xi = (si - cr * dr + ci * di) * 0.25;
+
+      outReal[i] = xr;
+      outImag[i] = xi;
+      outReal[len - i] = xr;
+      outImag[len - i] = -xi;
+    }
+
+    return out;
+  }
+
+  /**
+   * Does a reverse transform of the given frequency-domain input.
+   * The input and output arrays must be at least half the FFT's length.
+   * @param real An array of real parts.
+   * @param imag An array of imaginary parts.
+   * @return The real output of the reverse transform.
+   */
+  reverse(real: Float32Array, imag: Float32Array): Float32Array {
+    const coefReal = this.coefReal;
+    const coefImag = this.coefImag;
+    const fftReal = this.copyEven;
+    const fftImag = this.copyOdd;
+    const len = this.length;
+    const hlen = len / 2;
+
+    fftReal[0] = real[0] + real[hlen];
+    fftImag[0] = real[0] - real[hlen];
+
+    for (let i = 1; i < hlen; ++i) {
+      const cr = coefReal[i];
+      const ci = coefImag[i];
+      const sr = real[i] + real[hlen - i];
+      const si = imag[i] - imag[hlen - i];
+      const dr = real[i] - real[hlen - i];
+      const di = imag[i] + imag[hlen - i];
+      fftReal[i] = sr - cr * di + ci * dr;
+      fftImag[i] = si + cr * dr + ci * di;
+    }
+
+    const [outEven, outOdd] = this.halfFft.reverse(fftReal, fftImag);
+    const out = this.outReal.get(len);
+    for (let i = 0; i < hlen; ++i) {
+      out[2 * i] = outEven[i];
+      out[2 * i + 1] = outOdd[i];
+    }
+    return out;
+  }
+}
+
 /** Array of complex numbers. Real and imaginary parts are separate. */
 type ComplexArray = { real: Float32Array; imag: Float32Array };
 
@@ -256,7 +368,7 @@ function makeFftCoefficients(length: number): ComplexArray[] {
       imag: new Float32Array(halfSize),
     });
     for (let i = 0; i < halfSize; ++i) {
-      const fwdAngle = (-1 * Math.PI * i) / halfSize;
+      const fwdAngle = (-Math.PI * i) / halfSize;
       coefs[bin].real[i] = Math.cos(fwdAngle);
       coefs[bin].imag[i] = Math.sin(fwdAngle);
     }

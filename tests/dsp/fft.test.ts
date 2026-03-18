@@ -14,14 +14,17 @@
 
 import { test, assert } from "vitest";
 import {
+  add,
   argument,
   iq,
   iqAdd,
   iqRmsd,
   iqSineTone,
   modulus,
+  rmsd,
+  sineTone,
 } from "../testutil.js";
-import { FFT } from "../../src/dsp/fft.js";
+import { FFT, RealFFT } from "../../src/dsp/fft.js";
 
 test("transform", () => {
   const sampleRate = 4096;
@@ -30,7 +33,7 @@ test("transform", () => {
     iqSineTone(fft.length, sampleRate, 300, 0.1, 1),
     iqSineTone(fft.length, sampleRate, -1300, 0.2, 1.1),
     iqSineTone(fft.length, sampleRate, 2300, 0.3, 1.2),
-    iqSineTone(fft.length, sampleRate, -3300, 0.4, 1.3)
+    iqSineTone(fft.length, sampleRate, -3300, 0.4, 1.3),
   );
   let output = fft.transform(input[0], input[1]);
   assert.approximately(modulus(output, 300), 0.1, 1e-7);
@@ -61,9 +64,40 @@ test("reverse", () => {
     iqSineTone(fft.length, sampleRate, 300, 0.1, 1),
     iqSineTone(fft.length, sampleRate, -1300, 0.2, 1.1),
     iqSineTone(fft.length, sampleRate, 2300, 0.3, 1.2),
-    iqSineTone(fft.length, sampleRate, -3300, 0.4, 1.3)
+    iqSineTone(fft.length, sampleRate, -3300, 0.4, 1.3),
   );
   assert.isAtMost(iqRmsd(output, expected), 1e-7);
+});
+
+test("transformReal", () => {
+  const sampleRate = 4096;
+  const fft = RealFFT.ofLength(4096);
+  const real = add(
+    sineTone(fft.length, sampleRate, 300, 0.3),
+    sineTone(fft.length, sampleRate, 1300, 0.7),
+  );
+  const actual = fft.transform(real);
+  assert.approximately(modulus(actual, 300), 0.15, 1e-7);
+  assert.approximately(modulus(actual, 1300), 0.35, 1e-7);
+  assert.approximately(modulus(actual, 4096 - 300), 0.15, 1e-7);
+  assert.approximately(modulus(actual, 4096 - 1300), 0.35, 1e-7);
+});
+
+test("reverseReal", () => {
+  const sampleRate = 4096;
+  let fft = RealFFT.ofLength(4096);
+  let input = iq(fft.length);
+  input[0][300] = 0.15 * Math.cos(1);
+  input[1][300] = 0.15 * Math.sin(1);
+  input[0][1300] = 0.35 * Math.cos(1.1);
+  input[1][1300] = 0.35 * Math.sin(1.1);
+  let output = fft.reverse(input[0], input[1]);
+
+  let expected = add(
+    sineTone(fft.length, sampleRate, 300, 0.3, 1),
+    sineTone(fft.length, sampleRate, 1300, 0.7, 1.1),
+  );
+  assert.isAtMost(rmsd(output, expected), 1e-7);
 });
 
 test("roundtrip", () => {
@@ -73,7 +107,7 @@ test("roundtrip", () => {
   for (let f = 0; f < fft.length / 2; ++f) {
     input = iqAdd(
       input,
-      iqSineTone(sampleRate, sampleRate, f, 1 / fft.length, f)
+      iqSineTone(sampleRate, sampleRate, f, 1 / fft.length, f),
     );
   }
 

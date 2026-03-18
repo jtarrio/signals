@@ -331,3 +331,22 @@ fft.setWindow(makeBlackmanWindow(fft.lenght));
 let input: [Float32Array, Float32Array] = getSomeIqSamples();
 let output = fft.transform(input[0], input[1]);
 ```
+
+### Real FFT
+
+You can use the `RealFFT` class to calculate the FFT and reverse FFT of real signals more efficiently.
+
+Use the `RealFFT.ofLength()` static method to generate an instance of `RealFFT` of the appropriate length. If the size you provide is not a power of 2, the `RealFFT` instance will be scaled up to the next power of 2.
+
+The `RealFFT` class has the following methods:
+
+- `transform(real: Float32Array): FFTOutput` - computes the FFT for the real samples provided by `real`. This array should be the same length as the FFT size, but it is not an error if not; the function will only consider samples up to the FFT size and pad the rest with zeroes.
+- `reverse(real: Float32Array, imag: Float32Array): Float32Array` — computes the reverse FFT for the complex samples provided by `real` and `imag`, outputting real samples. The `real` and `imag` arrays should be at least half of the FFT size; only the positive frequency components are used to compute the inverse FFT.
+
+```typescript
+import { RealFFT } from "@jtarrio/signals/dsp/fft.js";
+
+let fft = FFT.ofLength(1024);
+let input: Float32Array = getSomeSamples();
+let output = fft.transform(input);
+```
