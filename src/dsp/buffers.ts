@@ -29,7 +29,7 @@ abstract class Pool<T extends TypedArray<T>> {
   constructor(
     private make: (length: number) => T,
     count: number,
-    length?: number
+    length?: number,
   ) {
     this.buffers = [...Array(count).keys()].map(() => make(length || 0));
     this.current = 0;
@@ -98,38 +98,105 @@ export class IqPool {
 }
 
 interface TypedArray<T> {
-    readonly BYTES_PER_ELEMENT: number;
-    readonly buffer: ArrayBufferLike;
-    readonly byteLength: number;
-    readonly byteOffset: number;
-    copyWithin(target: number, start: number, end?: number): this;
-    every(predicate: (value: number, index: number, array: this) => unknown, thisArg?: any): boolean;
-    fill(value: number, start?: number, end?: number): this;
-    filter(predicate: (value: number, index: number, array: this) => any, thisArg?: any): T;
-    find(predicate: (value: number, index: number, obj: this) => boolean, thisArg?: any): number | undefined;
-    findIndex(predicate: (value: number, index: number, obj: this) => boolean, thisArg?: any): number;
-    forEach(callbackfn: (value: number, index: number, array: this) => void, thisArg?: any): void;
-    indexOf(searchElement: number, fromIndex?: number): number;
-    join(separator?: string): string;
-    lastIndexOf(searchElement: number, fromIndex?: number): number;
-    readonly length: number;
-    map(callbackfn: (value: number, index: number, array: this) => number, thisArg?: any): T;
-    reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: this) => number): number;
-    reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: this) => number, initialValue: number): number;
-    reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: this) => U, initialValue: U): U;
-    reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: this) => number): number;
-    reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: this) => number, initialValue: number): number;
-    reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: this) => U, initialValue: U): U;
-    reverse(): this;
-    set(array: ArrayLike<number>, offset?: number): void;
-    slice(start?: number, end?: number): T;
-    some(predicate: (value: number, index: number, array: this) => unknown, thisArg?: any): boolean;
-    sort(compareFn?: (a: number, b: number) => number): this;
-    subarray(begin?: number, end?: number): T;
-    toLocaleString(): string;
-    toString(): string;
-    valueOf(): this;
-    [index: number]: number;
+  readonly BYTES_PER_ELEMENT: number;
+  readonly buffer: ArrayBufferLike;
+  readonly byteLength: number;
+  readonly byteOffset: number;
+  copyWithin(target: number, start: number, end?: number): this;
+  every(
+    predicate: (value: number, index: number, array: this) => unknown,
+    thisArg?: any,
+  ): boolean;
+  fill(value: number, start?: number, end?: number): this;
+  filter(
+    predicate: (value: number, index: number, array: this) => any,
+    thisArg?: any,
+  ): T;
+  find(
+    predicate: (value: number, index: number, obj: this) => boolean,
+    thisArg?: any,
+  ): number | undefined;
+  findIndex(
+    predicate: (value: number, index: number, obj: this) => boolean,
+    thisArg?: any,
+  ): number;
+  forEach(
+    callbackfn: (value: number, index: number, array: this) => void,
+    thisArg?: any,
+  ): void;
+  indexOf(searchElement: number, fromIndex?: number): number;
+  join(separator?: string): string;
+  lastIndexOf(searchElement: number, fromIndex?: number): number;
+  readonly length: number;
+  map(
+    callbackfn: (value: number, index: number, array: this) => number,
+    thisArg?: any,
+  ): T;
+  reduce(
+    callbackfn: (
+      previousValue: number,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => number,
+  ): number;
+  reduce(
+    callbackfn: (
+      previousValue: number,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => number,
+    initialValue: number,
+  ): number;
+  reduce<U>(
+    callbackfn: (
+      previousValue: U,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => U,
+    initialValue: U,
+  ): U;
+  reduceRight(
+    callbackfn: (
+      previousValue: number,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => number,
+  ): number;
+  reduceRight(
+    callbackfn: (
+      previousValue: number,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => number,
+    initialValue: number,
+  ): number;
+  reduceRight<U>(
+    callbackfn: (
+      previousValue: U,
+      currentValue: number,
+      currentIndex: number,
+      array: this,
+    ) => U,
+    initialValue: U,
+  ): U;
+  reverse(): this;
+  set(array: ArrayLike<number>, offset?: number): void;
+  slice(start?: number, end?: number): T;
+  some(
+    predicate: (value: number, index: number, array: this) => unknown,
+    thisArg?: any,
+  ): boolean;
+  sort(compareFn?: (a: number, b: number) => number): this;
+  subarray(begin?: number, end?: number): T;
+  toLocaleString(): string;
+  toString(): string;
+  valueOf(): this;
+  [index: number]: number;
 }
 
 /**
@@ -165,7 +232,7 @@ class RingBuffer<T extends TypedArray<T>> {
 
   /**
    * Stores repeated copies of a value in the ring buffer.
-   * 
+   *
    * @param value the value to store.
    * @param count the number of copies to store. The whole ring buffer is filled if not specified.
    * */
@@ -200,7 +267,7 @@ class RingBuffer<T extends TypedArray<T>> {
       data,
       data.length - count,
       this.buffer,
-      this.writePos
+      this.writePos,
     );
     this.writePos = dstOffset;
     this.filled = Math.min(this.buffer.length, this.filled + count);
@@ -250,13 +317,13 @@ class RingBuffer<T extends TypedArray<T>> {
     src: T,
     srcOffset: number,
     dst: T,
-    dstOffset: number
+    dstOffset: number,
   ): { srcOffset: number; dstOffset: number } {
     while (count > 0) {
       const copyCount = Math.min(
         count,
         src.length - srcOffset,
-        dst.length - dstOffset
+        dst.length - dstOffset,
       );
       dst.set(src.subarray(srcOffset, srcOffset + copyCount), dstOffset);
       srcOffset = (srcOffset + copyCount) % src.length;
@@ -273,5 +340,87 @@ class RingBuffer<T extends TypedArray<T>> {
 export class Float32RingBuffer extends RingBuffer<Float32Array> {
   constructor(size: number) {
     super(new Float32Array(size));
+  }
+}
+
+/**
+ * A ring buffer for I/Q signals.
+ */
+export class IqRingBuffer {
+  constructor(size: number) {
+    this.ringI = new Float32RingBuffer(size);
+    this.ringQ = new Float32RingBuffer(size);
+  }
+
+  private ringI: Float32RingBuffer;
+  private ringQ: Float32RingBuffer;
+
+  /** Returns the ring buffer's capacity. */
+  get capacity() {
+    return this.ringI.capacity;
+  }
+
+  /** Returns the number of values that can be accessed using moveTo. */
+  get available() {
+    return this.ringI.available;
+  }
+
+  /** Empties the ring buffer. */
+  clear() {
+    this.ringI.clear();
+    this.ringQ.clear();
+  }
+
+  /**
+   * Stores repeated copies of a value in the ring buffer.
+   *
+   * @param real the real part of the value to store.
+   * @param imag the imaginary part of the value to store.
+   * @param count the number of copies to store. The whole ring buffer is filled if not specified.
+   * */
+  fill(real: number, imag: number, count?: number) {
+    this.ringI.fill(real, count);
+    this.ringQ.fill(imag, count);
+  }
+
+  /** Copies the provided data into the ring buffer. */
+  store(real: Float32Array, imag: Float32Array) {
+    if (real.length == imag.length) {
+      this.ringI.store(real);
+      this.ringQ.store(imag);
+    } else {
+      let l = Math.min(real.length, imag.length);
+      this.ringI.store(real.subarray(0, l));
+      this.ringQ.store(imag.subarray(0, l));
+    }
+  }
+
+  /**
+   * Fills the provided array with values from the ring buffer,
+   * consuming it in the same order as the values were written.
+   * Returns the number of values copied.
+   */
+  moveTo(real: Float32Array, imag: Float32Array): number {
+    this.ringI.moveTo(real);
+    return this.ringQ.moveTo(imag);
+  }
+
+  /**
+   * Consumes a number of values from the ring buffer, as if they had been read through moveTo().
+   * @param count the number of values to consume.
+   */
+  consume(count: number) {
+    this.ringI.consume(count);
+    this.ringQ.consume(count);
+  }
+
+  /**
+   * Fills the provided array with the latest values stored in the ring buffer,
+   * without consuming it and without taking into account the values consumed
+   * by moveTo.
+   */
+  copyTo(real: Float32Array, imag: Float32Array) {
+    this.ringI.copyTo(real);
+    this.ringQ.copyTo(imag);
   }
 }

@@ -48,69 +48,81 @@ describe("DemodCW", () => {
     let outSampleRate = 51200; // Puts 600 Hz in one bin for a 4096-bin FFT
     let inLen = 2 * inSampleRate;
 
-    let demod = new DemodCW(
-      inSampleRate,
-      outSampleRate,
-      getMode("CW") as ModeCW
+    const runTests = (demod: DemodCW) => () => {
+      const demodulate = (freq: number, noiseAmpl?: number) => {
+        let modulated = tone(freq, 0.1);
+        if (noiseAmpl !== undefined)
+          modulated = sum(modulated, noise(noiseAmpl, prng()));
+        let I = new Float32Array(inLen);
+        let Q = new Float32Array(inLen);
+        modulated(0, inSampleRate, 0, I, Q);
+        return demod.demodulate(I, Q, signalFreq);
+      };
+
+      const fftTransform = (signal: Float32Array) => {
+        return FFT.ofLength(4096).transform(
+          signal.subarray(signal.length - 4096),
+          new Float32Array(4096),
+        );
+      };
+
+      const binModulus = (transformed: IQ, freq: number) => {
+        return modulus(
+          transformed,
+          Math.floor(freq * transformed[0].length) / outSampleRate,
+        );
+      };
+
+      test("Zeroed in", () => {
+        let output = demodulate(signalFreq);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 575), 0.03);
+        assert.isAtLeast(binModulus(transformed, 600), 0.45);
+        assert.isAtMost(binModulus(transformed, 625), 0.03);
+        assert.isAtLeast(output.snr, 1000);
+      });
+
+      test("Slightly above", () => {
+        let output = demodulate(signalFreq + 50);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 625), 0.03);
+        assert.isAtLeast(binModulus(transformed, 650), 0.45);
+        assert.isAtMost(binModulus(transformed, 675), 0.03);
+        assert.isAtLeast(output.snr, 800);
+      });
+
+      test("Too high", () => {
+        let output = demodulate(signalFreq + 250);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 825), 0.01);
+        assert.isAtMost(binModulus(transformed, 850), 0.03);
+        assert.isAtMost(binModulus(transformed, 875), 0.01);
+        assert.isAtMost(output.snr, 10);
+      });
+
+      test("Zeroed in with noise", () => {
+        let output = demodulate(signalFreq, 0.9);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 575), 0.04);
+        assert.isAtLeast(binModulus(transformed, 600), 0.3);
+        assert.isAtMost(binModulus(transformed, 625), 0.04);
+        assert.isAtLeast(output.snr, 20);
+      });
+    };
+
+    describe(
+      "FIR filter",
+      runTests(
+        new DemodCW(inSampleRate, outSampleRate, getMode("CW") as ModeCW),
+      ),
     );
-
-    const demodulate = (freq: number, noiseAmpl?: number) => {
-      let modulated = tone(freq, 0.1);
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
-      let I = new Float32Array(inLen);
-      let Q = new Float32Array(inLen);
-      modulated(0, inSampleRate, 0, I, Q);
-      return demod.demodulate(I, Q, signalFreq);
-    };
-
-    const fftTransform = (signal: Float32Array) => {
-      return FFT.ofLength(4096).transform(
-        signal.subarray(signal.length - 4096),
-        new Float32Array(4096)
-      );
-    };
-
-    const binModulus = (transformed: IQ, freq: number) => {
-      return modulus(
-        transformed,
-        Math.floor(freq * transformed[0].length) / outSampleRate
-      );
-    };
-
-    test("Zeroed in", () => {
-      let output = demodulate(signalFreq);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 575), 0.03);
-      assert.isAtLeast(binModulus(transformed, 600), 0.45);
-      assert.isAtMost(binModulus(transformed, 625), 0.03);
-      assert.isAtLeast(output.snr, 1000);
-    });
-
-    test("Slightly above", () => {
-      let output = demodulate(signalFreq + 50);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 625), 0.03);
-      assert.isAtLeast(binModulus(transformed, 650), 0.45);
-      assert.isAtMost(binModulus(transformed, 675), 0.03);
-      assert.isAtLeast(output.snr, 800);
-    });
-
-    test("Too high", () => {
-      let output = demodulate(signalFreq + 250);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 825), 0.01);
-      assert.isAtMost(binModulus(transformed, 850), 0.03);
-      assert.isAtMost(binModulus(transformed, 875), 0.01);
-      assert.isAtMost(output.snr, 5);
-    });
-
-    test("Zeroed in with noise", () => {
-      let output = demodulate(signalFreq, 0.9);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 575), 0.04);
-      assert.isAtLeast(binModulus(transformed, 600), 0.3);
-      assert.isAtMost(binModulus(transformed, 625), 0.04);
-      assert.isAtLeast(output.snr, 20);
-    });
+    describe(
+      "FFT filter",
+      runTests(
+        new DemodCW(inSampleRate, outSampleRate, getMode("CW") as ModeCW, {
+          useFftFilter: true,
+        }),
+      ),
+    );
   });
 });

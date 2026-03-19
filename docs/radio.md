@@ -29,7 +29,8 @@ The constructor can also take an `options` argument, which is an object with the
 We need a [`SignalSource`](../src/radio/signal_source.ts) object and a [`SampleReceiver`](../src/radio/sample_receiver.ts) object to create the [`Radio`](../src/radio/radio.ts). For this example, we will create a tone generator and a sample receiver logs the number of samples that were received in each block. (There will be a full explanation of the [`SignalSource`](../src/radio/signal_source.ts) and [`SampleReceiver`](../src/radio/sample_receiver.ts) interfaces later.)
 
 ```typescript
-import { RealTimeSource, SimpleProvider } from "@jtarrio/signals/radio.js";
+import { GeneratedSource } from "@jtarrio/signals/sources/generated.js";
+import { tone } from "@jtarrio/signals/sources/generators.js";
 
 class MyReceiver {
   setSampleRate(sampleRate) {}
@@ -38,7 +39,7 @@ class MyReceiver {
   }
 }
 
-let source = new Generated(tone(10000000, 0.1));
+let source = new GeneratedSource(tone(10000000, 0.1));
 let receiver = new MyReceiver();
 let radio = new Radio(new SimpleProvider(source), receiver);
 ```
@@ -337,10 +338,11 @@ import {
   noise,
   sum,
   tone,
+  wbfmSignal,
 } from "@jtarrio/signals/sources/generators.js";
-import { RealTimeSource } from "@jtarrio/signals/sources/realtime.js";
+import { GeneratedSource } from "@jtarrio/signals/sources/generated.js";
 
-let source = new RealTimeSource(
+let source = new GeneratedSource(
   sum(
     modulateFM(88500000, 75000, 0.1, wbfmSignal(tone(600, 0.5))),
     modulateAM(810000, 0.1, tone(600, 0.5)),

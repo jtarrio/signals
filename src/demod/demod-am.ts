@@ -16,12 +16,7 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { AMDemodulator } from "../dsp/demodulators.js";
-import {
-  FrequencyShifter,
-  FIRFilter,
-  FFTFilter,
-  IqFilter,
-} from "../dsp/filters.js";
+import { FrequencyShifter, IqFIRFilter, IqFFTFilter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -62,9 +57,9 @@ export class DemodAM implements Demod<ModeAM> {
       this.mode.bandwidth / 2,
       this.rfTaps,
     );
-    this.filter = new IqFilter(
-      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
-    );
+    this.filter = options?.useFftFilter
+      ? new IqFFTFilter(kernel)
+      : new IqFIRFilter(kernel);
     this.demodulator = new AMDemodulator(outRate);
     this.outPool = new Float32Pool(1);
   }
@@ -72,7 +67,7 @@ export class DemodAM implements Demod<ModeAM> {
   private rfTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filter: IqFilter;
+  private filter: IqFIRFilter | IqFFTFilter;
   private demodulator: AMDemodulator;
   private outPool: Float32Pool;
 

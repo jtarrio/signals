@@ -73,11 +73,11 @@ class DemodDSB implements Demod<ModeDSB> {
   private filterI: FIRFilter;
   private filterQ: FIRFilter;
 
-  getMode(): ModeCW {
+  getMode(): ModeDSB {
     return this.mode;
   }
 
-  setMode(mode: ModeCW) {
+  setMode(mode: ModeDSB) {
     this.mode = mode;
     const kernel = makeLowPassKernel(this.outRate, mode.bandwidth / 2, 151);
     this.filterI.setCoefficients(kernel);
@@ -107,7 +107,7 @@ class DemodDSB implements Demod<ModeDSB> {
 
 ### Define the configurator
 
-To write your configurator, you must extend the [`Parameters<M extends Mode>`](../src/demod/modes.ts) class. You will need to override at least two methods:
+To write your configurator, you must extend the [`Configurator<M extends Mode>`](../src/demod/modes.ts) class. You will need to override at least two methods:
 
 - `create(scheme: string)` — it must return a mode parameters object with the default settings.
 - `getBandwidth(): number` — it must return the bandwidth used by the mode.
@@ -134,7 +134,7 @@ export class ConfigDSB extends Configurator<ModeDSB> {
   getBandwidth(): number {
     return this.mode.bandwidth;
   }
-  setBandwidth(bandwidth: number): ConfigCW {
+  setBandwidth(bandwidth: number): ConfigDSB {
     bandwidth = Math.max(250, Math.min(bandwidth, 30000));
     // Do not do this:
     // this.mode.bandwidth = bandwidth

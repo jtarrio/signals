@@ -21,6 +21,7 @@ import {
   iqRealSineTone,
   iqRmsd,
   iqSineTone,
+  iqSubarray,
   noise,
   power,
   rmsd,
@@ -38,8 +39,10 @@ import {
   PilotDetector,
   Preemphasis,
   FFTFilter,
+  IqFIRFilter,
+  IqFFTFilter,
 } from "../../src/dsp/filters.js";
-import { makeLowPassKernel } from "../../dist/dsp/coefficients.js";
+import { makeLowPassKernel } from "../../src/dsp/coefficients.js";
 
 test("DelayFilter", () => {
   let filter = new DelayFilter(2);
@@ -55,7 +58,7 @@ test("DelayFilter", () => {
   filter.inPlace(signal);
   assert.deepEqual(
     signal,
-    new Float32Array([23, 24, 30, 31, 32, 33, 34, 35, 36, 37])
+    new Float32Array([23, 24, 30, 31, 32, 33, 34, 35, 36, 37]),
   );
   signal = count(40, 43);
   filter.inPlace(signal);
@@ -142,27 +145,50 @@ test("FIRFilter symmetry", () => {
   }
 });
 
-test("STFTFilter", () => {
+test("FFTFilter", () => {
   let coefs = makeLowPassKernel(1024000, 150000, 151);
   let fir = new FIRFilter(coefs);
-  let stft = new FFTFilter(coefs);
+  let fft = new FFTFilter(coefs);
 
   let input = sineTone(10000, 1024000, 150000, 1, 0.1234);
   let firInput = new Float32Array(input);
   let stftInput = new Float32Array(input);
 
   fir.inPlace(firInput);
-  stft.inPlace(stftInput);
+  fft.inPlace(stftInput);
+
+  let firDelay = fir.getDelay();
+  let stftDelay = fft.getDelay();
+
+  assert.isAtMost(
+    rmsd(
+      firInput.subarray(firDelay, firInput.length - stftDelay),
+      stftInput.subarray(stftDelay, stftInput.length - firDelay),
+    ),
+    1e-7,
+  );
+});
+
+test("IqFFTFilter", () => {
+  let coefs = makeLowPassKernel(1024000, 150000, 151);
+  let fir = new IqFIRFilter(coefs);
+  let stft = new IqFFTFilter(coefs);
+
+  let firInput = iqSineTone(10000, 1024000, 150000, 1, 0.1234);
+  let stftInput = iqSineTone(10000, 1024000, 150000, 1, 0.1234);
+
+  fir.inPlace(firInput[0], firInput[1]);
+  stft.inPlace(stftInput[0], stftInput[1]);
 
   let firDelay = fir.getDelay();
   let stftDelay = stft.getDelay();
 
   assert.isAtMost(
-    rmsd(
-      firInput.subarray(firDelay, firInput.length - stftDelay),
-      stftInput.subarray(stftDelay, stftInput.length - firDelay)
+    iqRmsd(
+      iqSubarray(firInput, firDelay, firInput.length - stftDelay),
+      iqSubarray(stftInput, stftDelay, stftInput.length - firDelay),
     ),
-    1e-7
+    1e-7,
   );
 });
 
@@ -247,7 +273,7 @@ test("IIRLowPass", () => {
         filterPower(i),
         expectedPower(i),
         0.005,
-        `Mismatch in frequency response for ${i} Hz with corner frequency ${cornerFrequency} Hz`
+        `Mismatch in frequency response for ${i} Hz with corner frequency ${cornerFrequency} Hz`,
       );
     }
   }
@@ -278,7 +304,7 @@ test("IIRLowPass2", () => {
     assert.isAtMost(
       filterPower(i),
       maxExpectedPower(i),
-      `Mismatch in frequency response for ${i} Hz`
+      `Mismatch in frequency response for ${i} Hz`,
     );
   }
 });
@@ -308,7 +334,7 @@ test("Deemphasis", () => {
         filterPower(i),
         expectedPower(i),
         0.001,
-        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
+        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`,
       );
     }
   }
@@ -331,7 +357,7 @@ test("Preemphasis", () => {
         filterPower(i),
         0.5,
         0.002,
-        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`
+        `Mismatch in frequency response for ${i} Hz with time constant ${timeConstant} µs`,
       );
     }
   }
@@ -348,9 +374,9 @@ test("FrequencyShifter", () => {
   // We expect to see one complex sinetone at -700 Hz and another at 1300 Hz
   let expected = iqAdd(
     iqSineTone(80, 8000, -700, 0.25),
-    iqSineTone(80, 8000, 1300, 0.25)
+    iqSineTone(80, 8000, 1300, 0.25),
   );
-  assert.isAtMost(iqRmsd(input, expected), 0.0005);
+  assert.isAtMost(iqRmsd(input, expected), 1e-7);
 });
 
 describe("PilotDetector", () => {
@@ -396,7 +422,7 @@ describe("PilotDetector", () => {
       assert.isTrue(detector.locked);
       assert.isAtMost(
         rmsd(tone.subarray(len - 5000), output[0].subarray(len - 5000)),
-        expected
+        expected,
       );
     });
   }

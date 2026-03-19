@@ -32,7 +32,7 @@ export function rmsd<T extends ArrayLike<any>>(a: T, b: T): number {
 
 // Computes the root-mean-square difference of two I/Q signals.
 export function iqRmsd(a: IQ, b: IQ): number {
-  const num = Math.min(a.length, b.length);
+  const num = Math.min(a[0].length, b[0].length);
   let sum = 0;
   for (let c = 0; c < 2; ++c) {
     for (let i = 0; i < num; ++i) {

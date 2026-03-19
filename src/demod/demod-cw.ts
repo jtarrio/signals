@@ -16,10 +16,9 @@ import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import {
   AGC,
-  FFTFilter,
-  FIRFilter,
   FrequencyShifter,
-  IqFilter,
+  IqFFTFilter,
+  IqFIRFilter,
 } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
@@ -64,9 +63,9 @@ export class DemodCW implements Demod<ModeCW> {
       mode.bandwidth / 2,
       this.audioTaps,
     );
-    this.filter = new IqFilter(
-      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
-    );
+    this.filter = options?.useFftFilter
+      ? new IqFFTFilter(kernel)
+      : new IqFIRFilter(kernel);
     this.toneShifter = new FrequencyShifter(outRate);
     this.toneFrequency = toneFrequency;
     this.agc = new AGC(outRate, 10);
@@ -76,7 +75,7 @@ export class DemodCW implements Demod<ModeCW> {
   private audioTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filter: IqFilter;
+  private filter: IqFIRFilter | IqFFTFilter;
   private toneShifter: FrequencyShifter;
   private toneFrequency: number;
   private agc: AGC;

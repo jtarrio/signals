@@ -14,7 +14,14 @@
 
 import { bench, describe } from "vitest";
 import { makeLowPassKernel } from "../../src/dsp/coefficients.js";
-import { Filter, FIRFilter, FFTFilter } from "../../src/dsp/filters.js";
+import {
+  Filter,
+  FIRFilter,
+  FFTFilter,
+  IqFilter,
+  IqFFTFilter,
+  IqFIRFilter,
+} from "../../src/dsp/filters.js";
 
 describe("Filters", () => {
   const sampleRate = 192000;
@@ -33,6 +40,30 @@ describe("Filters", () => {
       const coefs = makeLowPassKernel(sampleRate, freq, l);
       bench("FIRFilter", run(new FIRFilter(coefs)));
       bench("FFTFilter", run(new FFTFilter(coefs)));
+    });
+  }
+});
+
+describe("I/Q Filters", () => {
+  const sampleRate = 192000;
+  const len = sampleRate;
+  const freq = 150000;
+
+  const run = (filter: IqFilter) => () => {
+    let I = new Float32Array(len).map((_, i) =>
+      Math.cos((2 * Math.PI * freq * i) / sampleRate),
+    );
+    let Q = new Float32Array(len).map((_, i) =>
+      Math.sin((2 * Math.PI * freq * i) / sampleRate),
+    );
+    filter.inPlace(I, Q);
+  };
+
+  for (let l of [41, 151, 351]) {
+    describe(String(l), () => {
+      const coefs = makeLowPassKernel(sampleRate, freq, l);
+      bench("IqFIRFilter", run(new IqFIRFilter(coefs)));
+      bench("IqFFTFilter", run(new IqFFTFilter(coefs)));
     });
   }
 });

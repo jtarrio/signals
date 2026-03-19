@@ -55,68 +55,86 @@ describe("DemodWBFM", () => {
     let outSampleRate = 48000;
     let inLen = inSampleRate;
 
-    let demod = new DemodWBFM(
-      inSampleRate,
-      outSampleRate,
-      getMode("WBFM") as ModeWBFM,
-      { deemphasizerTc: 50 }
+    const runTests = (demod: DemodWBFM) => () => {
+      const demodulate = (signal: SampleGenerator, noiseAmpl?: number) => {
+        let modulated = modulateFM(
+          carrierFreq,
+          75000,
+          0.1,
+          wbfmSignal(signal, 50),
+        );
+        if (noiseAmpl !== undefined)
+          modulated = sum(modulated, noise(noiseAmpl, prng()));
+        let I = new Float32Array(inLen);
+        let Q = new Float32Array(inLen);
+        modulated(0, inSampleRate, 0, I, Q);
+        return demod.demodulate(I, Q, carrierFreq);
+      };
+
+      const fftTransform = (signal: Float32Array) => {
+        return FFT.ofLength(4096).transform(
+          signal.subarray(signal.length - 4096),
+          new Float32Array(4096),
+        );
+      };
+
+      const binModulus = (transformed: IQ, freq: number) => {
+        return modulus(
+          transformed,
+          Math.floor(freq * transformed[0].length) / outSampleRate,
+        );
+      };
+
+      test("Single tone", () => {
+        let signal = tone(1500, 1);
+        let output = demodulate(signal);
+        assert.isFalse(output.stereo);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
+        assert.isAbove(output.snr, 1.5);
+      });
+
+      test("Two tones", () => {
+        let signal = sum(tone(1500, 0.3), tone(2250, 0.6));
+        let output = demodulate(signal);
+        assert.isFalse(output.stereo);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.15, 0.015);
+        assert.approximately(binModulus(transformed, 2250), 0.3, 0.03);
+        assert.isAbove(output.snr, 2);
+      });
+
+      test("Single tone with noise", () => {
+        let signal = tone(1500, 1);
+        let output = demodulate(signal, 0.2);
+        let transformed = fftTransform(output.left);
+        assert.isAtLeast(binModulus(transformed, 1500), 0.15);
+        assert.isBelow(output.snr, 2);
+      });
+    };
+
+    describe(
+      "FIR filter",
+      runTests(
+        new DemodWBFM(
+          inSampleRate,
+          outSampleRate,
+          getMode("WBFM") as ModeWBFM,
+          { deemphasizerTc: 50 },
+        ),
+      ),
     );
-
-    const demodulate = (signal: SampleGenerator, noiseAmpl?: number) => {
-      let modulated = modulateFM(
-        carrierFreq,
-        75000,
-        0.1,
-        wbfmSignal(signal, 50)
-      );
-      if (noiseAmpl !== undefined)
-        modulated = sum(modulated, noise(noiseAmpl, prng()));
-      let I = new Float32Array(inLen);
-      let Q = new Float32Array(inLen);
-      modulated(0, inSampleRate, 0, I, Q);
-      return demod.demodulate(I, Q, carrierFreq);
-    };
-
-    const fftTransform = (signal: Float32Array) => {
-      return FFT.ofLength(4096).transform(
-        signal.subarray(signal.length - 4096),
-        new Float32Array(4096)
-      );
-    };
-
-    const binModulus = (transformed: IQ, freq: number) => {
-      return modulus(
-        transformed,
-        Math.floor(freq * transformed[0].length) / outSampleRate
-      );
-    };
-
-    test("Single tone", () => {
-      let signal = tone(1500, 1);
-      let output = demodulate(signal);
-      assert.isFalse(output.stereo);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
-      assert.isAbove(output.snr, 1.5);
-    });
-
-    test("Two tones", () => {
-      let signal = sum(tone(1500, 0.3), tone(2250, 0.6));
-      let output = demodulate(signal);
-      assert.isFalse(output.stereo);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.15, 0.015);
-      assert.approximately(binModulus(transformed, 2250), 0.3, 0.03);
-      assert.isAbove(output.snr, 2);
-    });
-
-    test("Single tone with noise", () => {
-      let signal = tone(1500, 1);
-      let output = demodulate(signal, 0.2);
-      let transformed = fftTransform(output.left);
-      assert.isAtLeast(binModulus(transformed, 1500), 0.15);
-      assert.isBelow(output.snr, 2);
-    });
+    describe(
+      "FFT filter",
+      runTests(
+        new DemodWBFM(
+          inSampleRate,
+          outSampleRate,
+          getMode("WBFM") as ModeWBFM,
+          { deemphasizerTc: 50, useFftFilter: true },
+        ),
+      ),
+    );
   });
 
   describe("Demodulate stereo", () => {
@@ -125,72 +143,90 @@ describe("DemodWBFM", () => {
     let outSampleRate = 48000;
     let inLen = inSampleRate;
 
-    let demod = new DemodWBFM(
-      inSampleRate,
-      outSampleRate,
-      getMode("WBFM") as ModeWBFM,
-      { deemphasizerTc: 50 }
+    const runTests = (demod: DemodWBFM) => () => {
+      const demodulate = (
+        left: SampleGenerator,
+        right: SampleGenerator,
+        noiseAmpl?: number,
+      ) => {
+        let modulated = modulateFM(
+          carrierFreq,
+          75000,
+          0.1,
+          wbfmSignal(left, right, 50),
+        );
+        if (noiseAmpl !== undefined)
+          modulated = sum(modulated, noise(noiseAmpl, prng()));
+        let I = new Float32Array(inLen);
+        let Q = new Float32Array(inLen);
+        modulated(0, inSampleRate, 0, I, Q);
+        return demod.demodulate(I, Q, carrierFreq);
+      };
+
+      const fftTransform = (signal: Float32Array) => {
+        return FFT.ofLength(4096).transform(
+          signal.subarray(signal.length - 4096),
+          new Float32Array(4096),
+        );
+      };
+
+      const binModulus = (transformed: IQ, freq: number) => {
+        return modulus(
+          transformed,
+          Math.floor(freq * transformed[0].length) / outSampleRate,
+        );
+      };
+
+      test("Single tone", () => {
+        let left = tone(1500, 1);
+        let right = tone(2250, 1);
+        let output = demodulate(left, right);
+        assert.isTrue(output.stereo);
+        let fftLeft = fftTransform(output.left);
+        assert.approximately(binModulus(fftLeft, 1500), 0.5, 0.05);
+        assert.approximately(binModulus(fftLeft, 2250), 0, 0.05);
+        let fftRight = fftTransform(output.right);
+        assert.approximately(binModulus(fftRight, 1500), 0, 0.05);
+        assert.approximately(binModulus(fftRight, 2250), 0.5, 0.05);
+        assert.isAbove(output.snr, 1.5);
+      });
+
+      test("Two tones", () => {
+        let left = sum(tone(1500, 0.3), tone(2250, 0.6));
+        let right = sum(tone(750, 0.4), tone(3000, 0.5));
+        let output = demodulate(left, right);
+        assert.isTrue(output.stereo);
+        let fftLeft = fftTransform(output.left);
+        assert.approximately(binModulus(fftLeft, 1500), 0.15, 0.015);
+        assert.approximately(binModulus(fftLeft, 2250), 0.3, 0.03);
+        let fftRight = fftTransform(output.right);
+        assert.approximately(binModulus(fftRight, 750), 0.2, 0.015);
+        assert.approximately(binModulus(fftRight, 3000), 0.25, 0.03);
+        assert.isAbove(output.snr, 2);
+      });
+    };
+
+    describe(
+      "FIR filter",
+      runTests(
+        new DemodWBFM(
+          inSampleRate,
+          outSampleRate,
+          getMode("WBFM") as ModeWBFM,
+          { deemphasizerTc: 50 },
+        ),
+      ),
     );
-
-    const demodulate = (
-      left: SampleGenerator,
-      right: SampleGenerator,
-      noiseAmpl?: number
-    ) => {
-      let modulated = modulateFM(
-        carrierFreq,
-        75000,
-        0.1,
-        wbfmSignal(left, right, 50)
-      );
-      if (noiseAmpl !== undefined)
-        modulated = sum(modulated, noise(noiseAmpl, prng()));
-      let I = new Float32Array(inLen);
-      let Q = new Float32Array(inLen);
-      modulated(0, inSampleRate, 0, I, Q);
-      return demod.demodulate(I, Q, carrierFreq);
-    };
-
-    const fftTransform = (signal: Float32Array) => {
-      return FFT.ofLength(4096).transform(
-        signal.subarray(signal.length - 4096),
-        new Float32Array(4096)
-      );
-    };
-
-    const binModulus = (transformed: IQ, freq: number) => {
-      return modulus(
-        transformed,
-        Math.floor(freq * transformed[0].length) / outSampleRate
-      );
-    };
-
-    test("Single tone", () => {
-      let left = tone(1500, 1);
-      let right = tone(2250, 1);
-      let output = demodulate(left, right);
-      assert.isTrue(output.stereo);
-      let fftLeft = fftTransform(output.left);
-      assert.approximately(binModulus(fftLeft, 1500), 0.5, 0.05);
-      assert.approximately(binModulus(fftLeft, 2250), 0, 0.05);
-      let fftRight = fftTransform(output.right);
-      assert.approximately(binModulus(fftRight, 1500), 0, 0.05);
-      assert.approximately(binModulus(fftRight, 2250), 0.5, 0.05);
-      assert.isAbove(output.snr, 1.5);
-    });
-
-    test("Two tones", () => {
-      let left = sum(tone(1500, 0.3), tone(2250, 0.6));
-      let right = sum(tone(750, 0.4), tone(3000, 0.5));
-      let output = demodulate(left, right);
-      assert.isTrue(output.stereo);
-      let fftLeft = fftTransform(output.left);
-      assert.approximately(binModulus(fftLeft, 1500), 0.15, 0.015);
-      assert.approximately(binModulus(fftLeft, 2250), 0.3, 0.03);
-      let fftRight = fftTransform(output.right);
-      assert.approximately(binModulus(fftRight, 750), 0.2, 0.015);
-      assert.approximately(binModulus(fftRight, 3000), 0.25, 0.03);
-      assert.isAbove(output.snr, 2);
-    });
+    describe(
+      "FFT filter",
+      runTests(
+        new DemodWBFM(
+          inSampleRate,
+          outSampleRate,
+          getMode("WBFM") as ModeWBFM,
+          { deemphasizerTc: 50, useFftFilter: true },
+        ),
+      ),
+    );
   });
 });

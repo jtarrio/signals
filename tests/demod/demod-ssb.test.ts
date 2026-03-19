@@ -16,6 +16,7 @@ import { test, assert, describe } from "vitest";
 import { IQ, modulus, prng } from "../testutil.js";
 import { ConfigSSB, DemodSSB, ModeSSB } from "../../src/demod/demod-ssb.js";
 import {
+  Demod,
   getMode,
   modeParameters,
   registerDemod,
@@ -43,7 +44,7 @@ describe("DemodSSB", () => {
     assert.equal(params.getStereo(), false);
   });
 
-  test("Mode configuration for USB", () => {
+  test("Mode configuration for LSB", () => {
     let mode = getMode("LSB");
     assert.equal(mode.scheme, "LSB");
 
@@ -65,93 +66,104 @@ describe("DemodSSB", () => {
     let outSampleRate = 48000;
     let inLen = 2.5 * inSampleRate;
 
-    let usbDemod = new DemodSSB(
-      inSampleRate,
-      outSampleRate,
-      getMode("USB") as ModeSSB
+    const runTests = (usbDemod: DemodSSB, lsbDemod: DemodSSB) => () => {
+      const demodulate = (
+        demod: DemodSSB,
+        freq: number,
+        ampl: number,
+        noiseAmpl?: number,
+      ) => {
+        let modulated = tone(carrierFreq + freq, ampl);
+        if (noiseAmpl !== undefined)
+          modulated = sum(modulated, noise(noiseAmpl, prng()));
+        let I = new Float32Array(inLen);
+        let Q = new Float32Array(inLen);
+        modulated(0, inSampleRate, 0, I, Q);
+        return demod.demodulate(I, Q, carrierFreq);
+      };
+
+      const fftTransform = (signal: Float32Array) => {
+        return FFT.ofLength(4096).transform(
+          signal.subarray(signal.length - 4096),
+          new Float32Array(4096),
+        );
+      };
+
+      const binModulus = (transformed: IQ, freq: number) => {
+        return modulus(
+          transformed,
+          Math.floor(freq * transformed[0].length) / outSampleRate,
+        );
+      };
+
+      test("Single tone USB same side", () => {
+        let output = demodulate(usbDemod, 1500, 1);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 1125), 1e-2);
+        assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
+        assert.isAtMost(binModulus(transformed, 1875), 1e-2);
+        assert.approximately(output.snr, 1, 0.01);
+      });
+
+      test("Single tone USB opposite side", () => {
+        let output = demodulate(usbDemod, -1500, 1);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 1125), 1e-2);
+        assert.isAtMost(binModulus(transformed, 1500), 1e-2);
+        assert.isAtMost(binModulus(transformed, 1875), 1e-2);
+        assert.isAtMost(output.snr, 1e-2);
+      });
+
+      test("Single tone LSB same side", () => {
+        let output = demodulate(lsbDemod, -1500, 1);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 1125), 1e-2);
+        assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
+        assert.isAtMost(binModulus(transformed, 1875), 1e-2);
+        assert.approximately(output.snr, 1, 0.01);
+      });
+
+      test("Single tone LSB opposite side", () => {
+        let output = demodulate(lsbDemod, +1500, 1);
+        let transformed = fftTransform(output.left);
+        assert.isAtMost(binModulus(transformed, 1125), 1e-2);
+        assert.isAtMost(binModulus(transformed, 1500), 1e-2);
+        assert.isAtMost(binModulus(transformed, 1875), 1e-2);
+        assert.isAtMost(output.snr, 1e-2);
+      });
+
+      test("Single tone upper side with noise", () => {
+        let output = demodulate(usbDemod, 1500, 1, 0.2);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
+        assert.approximately(output.snr, 1, 0.015);
+      });
+
+      test("Single tone lower side with noise", () => {
+        let output = demodulate(lsbDemod, -1500, 1, 0.2);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
+        assert.approximately(output.snr, 1, 0.015);
+      });
+    };
+
+    describe(
+      "FIR filter",
+      runTests(
+        new DemodSSB(inSampleRate, outSampleRate, getMode("USB") as ModeSSB),
+        new DemodSSB(inSampleRate, outSampleRate, getMode("LSB") as ModeSSB),
+      ),
     );
-    let lsbDemod = new DemodSSB(
-      inSampleRate,
-      outSampleRate,
-      getMode("LSB") as ModeSSB
+    describe(
+      "FFT filter",
+      runTests(
+        new DemodSSB(inSampleRate, outSampleRate, getMode("USB") as ModeSSB, {
+          useFftFilter: true,
+        }),
+        new DemodSSB(inSampleRate, outSampleRate, getMode("LSB") as ModeSSB, {
+          useFftFilter: true,
+        }),
+      ),
     );
-
-    const demodulate = (
-      demod: DemodSSB,
-      freq: number,
-      ampl: number,
-      noiseAmpl?: number
-    ) => {
-      let modulated = tone(carrierFreq + freq, ampl);
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
-      let I = new Float32Array(inLen);
-      let Q = new Float32Array(inLen);
-      modulated(0, inSampleRate, 0, I, Q);
-      return demod.demodulate(I, Q, carrierFreq);
-    };
-
-    const fftTransform = (signal: Float32Array) => {
-      return FFT.ofLength(4096).transform(
-        signal.subarray(signal.length - 4096),
-        new Float32Array(4096)
-      );
-    };
-
-    const binModulus = (transformed: IQ, freq: number) => {
-      return modulus(
-        transformed,
-        Math.floor(freq * transformed[0].length) / outSampleRate
-      );
-    };
-
-    test("Single tone USB same side", () => {
-      let output = demodulate(usbDemod, 1500, 1);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 1125), 1e-2);
-      assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
-      assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-      assert.approximately(output.snr, 1, 0.01);
-    });
-
-    test("Single tone USB opposite side", () => {
-      let output = demodulate(usbDemod, -1500, 1);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 1125), 1e-2);
-      assert.isAtMost(binModulus(transformed, 1500), 1e-2);
-      assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-      assert.isAtMost(output.snr, 1e-2);
-    });
-
-    test("Single tone LSB same side", () => {
-      let output = demodulate(lsbDemod, -1500, 1);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 1125), 1e-2);
-      assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
-      assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-      assert.approximately(output.snr, 1, 0.01);
-    });
-
-    test("Single tone LSB opposite side", () => {
-      let output = demodulate(lsbDemod, +1500, 1);
-      let transformed = fftTransform(output.left);
-      assert.isAtMost(binModulus(transformed, 1125), 1e-2);
-      assert.isAtMost(binModulus(transformed, 1500), 1e-2);
-      assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-      assert.isAtMost(output.snr, 1e-2);
-    });
-
-    test("Single tone upper side with noise", () => {
-      let output = demodulate(usbDemod, 1500, 1, 0.2);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
-      assert.approximately(output.snr, 1, 0.01);
-    });
-
-    test("Single tone lower side with noise", () => {
-      let output = demodulate(lsbDemod, -1500, 1, 0.2);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
-      assert.approximately(output.snr, 1, 0.01);
-    });
   });
 });

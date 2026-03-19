@@ -16,13 +16,7 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator } from "../dsp/demodulators.js";
-import {
-  FFTFilter,
-  Filter,
-  FIRFilter,
-  FrequencyShifter,
-  IqFilter,
-} from "../dsp/filters.js";
+import { FrequencyShifter, IqFFTFilter, IqFIRFilter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -59,9 +53,9 @@ export class DemodNBFM implements Demod<ModeNBFM> {
     this.shifter = new FrequencyShifter(inRate);
     this.downsampler = new ComplexDownsampler(inRate, outRate, downsamplerTaps);
     const kernel = makeLowPassKernel(outRate, mode.maxF, this.rfTaps);
-    this.filter = new IqFilter(
-      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
-    );
+    this.filter = options?.useFftFilter
+      ? new IqFFTFilter(kernel)
+      : new IqFIRFilter(kernel);
     this.demodulator = new FMDemodulator(mode.maxF / outRate);
     this.outPool = new Float32Pool(1);
   }
@@ -69,7 +63,7 @@ export class DemodNBFM implements Demod<ModeNBFM> {
   private rfTaps: number;
   private shifter: FrequencyShifter;
   private downsampler: ComplexDownsampler;
-  private filter: IqFilter;
+  private filter: IqFFTFilter | IqFIRFilter;
   private demodulator: FMDemodulator;
   private outPool: Float32Pool;
 

@@ -22,7 +22,9 @@ import {
   Filter,
   FIRFilter,
   FrequencyShifter,
+  IqFFTFilter,
   IqFilter,
+  IqFIRFilter,
 } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler, RealDownsampler } from "../dsp/resamplers.js";
@@ -131,9 +133,9 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
       );
     }
     const kernel = makeLowPassKernel(outRate, maxF, rfTaps);
-    this.filter = new IqFilter(
-      options?.useFftFilter ? new FFTFilter(kernel) : new FIRFilter(kernel),
-    );
+    this.filter = options?.useFftFilter
+      ? new IqFFTFilter(kernel)
+      : new IqFIRFilter(kernel);
     this.demodulator = new FMDemodulator(maxF / outRate);
   }
 

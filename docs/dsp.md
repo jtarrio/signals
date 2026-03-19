@@ -100,6 +100,23 @@ for (let i = 0; i < 100; ++i) {
 }
 ```
 
+The `IqRingBuffer` class is also available, which works just like `Float32RingBuffer`, but with complex signals. Its `store()`, `moveTo()`, and `copyTo()` methods take two arguments: the real parts of the signal and the imaginary parts.
+
+```typescript
+import { IqRingBuffer } from "@jtarrio/signals/dsp/buffers.js";
+
+let rb = new IqRingBuffer(64);
+
+for (let i = 0; i < 5; i++) {
+  let [I, Q]: [Float32Array, Float32Array] = getComplexSamples();
+  rb.store(I, Q);
+}
+
+let latestI = new Float32Array(64);
+let latestQ = new Float32Array(64);
+rb.copyTo(latestI, latestQ);
+```
+
 ## Filters
 
 ### FIR Filters
@@ -120,7 +137,7 @@ let lowpass = new FIRFilter(lowpassKernel);
 
 // Filter an array in place
 let samples1: Float32Array = getSomeSamples();
-lowpass.inplace(samples1);
+lowpass.inPlace(samples1);
 
 // Get filtered samples to implement a downsampler
 let samples2: Float32Array = getSomeSamples();
@@ -129,6 +146,44 @@ let output = new Float32Array(samples2.length / 2);
 for (let i = 0; i < output.length; i++) {
   output[i] = lowpass.get(i * 2);
 }
+```
+
+There is also an `IqFIRFilter` class that lets you apply an arbitrary filter kernel to a complex signal via convolution. You can only use it to filter in place.
+
+```typescript
+import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
+import { IqFIRFilter } from "@jtarrio/signals/dsp/filters.js";
+
+const sampleRate = 1024000;
+const cornerFreq = 75000;
+const kernelSize = 151;
+let lowpassKernel = makeLowPassKernel(sampleRate, cornerFreq, kernelSize);
+let lowpass = new IqFIRFilter(lowpassKernel);
+
+let [I, Q]: [Float32Array, Float32Array] = getSomeComplexSamples();
+lowpass.inPlace(I, Q);
+```
+
+### FFT filters
+
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains two classes that implement FIR filters via short-term Fourier transforms (STFT). Those classes are `FFTFilter` (used for real signals) and `IqFFTFilter` (used for complex signals.) They only offer in-place filtering:
+
+```typescript
+import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
+import { FFTFilter, IqFFTFilter } from "@jtarrio/signals/dsp/filters.js";
+
+const sampleRate = 1024000;
+const cornerFreq = 75000;
+const kernelSize = 151;
+let lowpassKernel = makeLowPassKernel(sampleRate, cornerFreq, kernelSize);
+
+let realLowpass = new FFTFilter(lowpassKernel);
+let samples = getSomeSamples();
+realLowpass.inPlace(samples);
+
+let complexLowpass = new IqFFTFilter(lowpassKernel);
+let [I, Q]: [Float32Array, Float32Array] = getSomeComplexSamples();
+complexLowpass.inPlace(I, Q);
 ```
 
 #### Hilbert transform
@@ -254,7 +309,7 @@ let realDownsampler = new RealDownsampler(
 let realInput: Float32Array = getSomeRealSamples();
 let realOutput: Float32Array = realDownsampler.downsample(realInput);
 
-let complexDownsampler = new RealDownsampler(
+let complexDownsampler = new ComplexDownsampler(
   inputSampleRate,
   outputSampleRate,
   kernelSize
@@ -327,7 +382,7 @@ import { FFT } from "@jtarrio/signals/dsp/fft.js";
 import { makeBlackmanWindow } from "@jtarrio/signals/dsp/coefficients.js";
 
 let fft = FFT.ofLength(1024);
-fft.setWindow(makeBlackmanWindow(fft.lenght));
+fft.setWindow(makeBlackmanWindow(fft.length));
 let input: [Float32Array, Float32Array] = getSomeIqSamples();
 let output = fft.transform(input[0], input[1]);
 ```
@@ -346,7 +401,7 @@ The `RealFFT` class has the following methods:
 ```typescript
 import { RealFFT } from "@jtarrio/signals/dsp/fft.js";
 
-let fft = FFT.ofLength(1024);
+let fft = RealFFT.ofLength(1024);
 let input: Float32Array = getSomeSamples();
 let output = fft.transform(input);
 ```

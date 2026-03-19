@@ -16,13 +16,7 @@
 import { Float32Pool } from "../dsp/buffers.js";
 import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { Sideband, SSBDemodulator } from "../dsp/demodulators.js";
-import {
-  FrequencyShifter,
-  AGC,
-  FIRFilter,
-  FFTFilter,
-  Filter,
-} from "../dsp/filters.js";
+import { FrequencyShifter, AGC, FIRFilter, FFTFilter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import { ComplexDownsampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";

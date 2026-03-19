@@ -22,7 +22,7 @@ import {
 } from "../../src/demod/modes.js";
 import { FFT } from "../../src/dsp/fft.js";
 import { modulateFM, noise, sum, tone } from "../../src/sources/generators.js";
-import { SampleGenerator } from "../../src/sources/realtime.js";
+import { SampleGenerator } from "../../src/sources/generated.js";
 
 describe("DemodNBFM", () => {
   registerDemod("NBFM", DemodNBFM, ConfigNBFM);
@@ -49,63 +49,78 @@ describe("DemodNBFM", () => {
     let outSampleRate = 48000;
     let inLen = inSampleRate;
 
-    let demod = new DemodNBFM(
-      inSampleRate,
-      outSampleRate,
-      getMode("NBFM") as ModeNBFM
+    const runTest = (demod: DemodNBFM) => () => {
+      const demodulate = (signal: SampleGenerator, noiseAmpl?: number) => {
+        let modulated = modulateFM(
+          carrierFreq,
+          demod.getMode().maxF,
+          0.1,
+          signal,
+        );
+        if (noiseAmpl !== undefined)
+          modulated = sum(modulated, noise(noiseAmpl, prng()));
+        let I = new Float32Array(inLen);
+        let Q = new Float32Array(inLen);
+        modulated(0, inSampleRate, 0, I, Q);
+        return demod.demodulate(I, Q, carrierFreq);
+      };
+
+      const fftTransform = (signal: Float32Array) => {
+        return FFT.ofLength(4096).transform(
+          signal.subarray(signal.length - 4096),
+          new Float32Array(4096),
+        );
+      };
+
+      const binModulus = (transformed: IQ, freq: number) => {
+        return modulus(
+          transformed,
+          Math.floor(freq * transformed[0].length) / outSampleRate,
+        );
+      };
+
+      test("Single tone", () => {
+        let signal = tone(1500, 1);
+        let output = demodulate(signal);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
+        assert.isAbove(output.snr, 4);
+      });
+
+      test("Two tones", () => {
+        let signal = sum(tone(1500, 0.3), tone(2250, 0.6));
+        let output = demodulate(signal);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.15, 0.015);
+        assert.approximately(binModulus(transformed, 2250), 0.3, 0.03);
+        assert.isAbove(output.snr, 4);
+      });
+
+      test("Single tone with noise", () => {
+        let signal = tone(1500, 1);
+        let output = demodulate(signal, 0.2);
+        let transformed = fftTransform(output.left);
+        assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
+        assert.isBelow(output.snr, 4);
+      });
+    };
+
+    describe(
+      "FIR filter",
+      runTest(
+        new DemodNBFM(inSampleRate, outSampleRate, getMode("NBFM") as ModeNBFM),
+      ),
     );
-
-    const demodulate = (signal: SampleGenerator, noiseAmpl?: number) => {
-      let modulated = modulateFM(
-        carrierFreq,
-        demod.getMode().maxF,
-        0.1,
-        signal
-      );
-      if (noiseAmpl !== undefined) modulated = sum(modulated, noise(noiseAmpl, prng()));
-      let I = new Float32Array(inLen);
-      let Q = new Float32Array(inLen);
-      modulated(0, inSampleRate, 0, I, Q);
-      return demod.demodulate(I, Q, carrierFreq);
-    };
-
-    const fftTransform = (signal: Float32Array) => {
-      return FFT.ofLength(4096).transform(
-        signal.subarray(signal.length - 4096),
-        new Float32Array(4096)
-      );
-    };
-
-    const binModulus = (transformed: IQ, freq: number) => {
-      return modulus(
-        transformed,
-        Math.floor(freq * transformed[0].length) / outSampleRate
-      );
-    };
-
-    test("Single tone", () => {
-      let signal = tone(1500, 1);
-      let output = demodulate(signal);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
-      assert.isAbove(output.snr, 4);
-    });
-
-    test("Two tones", () => {
-      let signal = sum(tone(1500, 0.3), tone(2250, 0.6));
-      let output = demodulate(signal);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.15, 0.015);
-      assert.approximately(binModulus(transformed, 2250), 0.3, 0.03);
-      assert.isAbove(output.snr, 4);
-    });
-
-    test("Single tone with noise", () => {
-      let signal = tone(1500, 1);
-      let output = demodulate(signal, 0.2);
-      let transformed = fftTransform(output.left);
-      assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
-      assert.isBelow(output.snr, 4);
-    });
+    describe(
+      "FFT filter",
+      runTest(
+        new DemodNBFM(
+          inSampleRate,
+          outSampleRate,
+          getMode("NBFM") as ModeNBFM,
+          { useFftFilter: true },
+        ),
+      ),
+    );
   });
 });

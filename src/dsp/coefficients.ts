@@ -62,7 +62,7 @@ export function makeHilbertKernel(length: number): Float32Array {
   const center = Math.floor(length / 2);
   let out = new Float32Array(length);
   for (let i = 0; i < out.length; ++i) {
-    if (i % 2 == 0) {
+    if ((center - i) % 2 != 0) {
       out[i] = 2 / (Math.PI * (center - i));
     }
   }
