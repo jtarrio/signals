@@ -21,16 +21,22 @@ export type PlayerOptions = {
    * If not specified, the default AudioContext constructor is used.
    */
   newAudioContext?: () => AudioContext;
+  /**
+   * How much time buffer to use to avoid stuttering, in seconds.
+   * If not specified, 0.05 seconds (50 milliseconds) is used.
+   */
+  timeBuffer?: number;
 };
 
 /** A class to play a series of sample buffers at a constant rate using the Web Audio API. */
 export class AudioPlayer implements Player {
   private static OUT_RATE = 48000;
-  private static TIME_BUFFER = 0.05;
 
   constructor(options?: PlayerOptions) {
     this.newAudioContext =
       options?.newAudioContext || (() => new AudioContext());
+    this.timeBuffer = options?.timeBuffer || 0.05;
+    this.pool = new Map();
     this.lastPlayedAt = -1;
     this.ac = undefined;
     this.gainNode = undefined;
@@ -38,6 +44,8 @@ export class AudioPlayer implements Player {
   }
 
   private newAudioContext: () => AudioContext;
+  private timeBuffer: number;
+  private pool: Map<number, AudioBuffer[]> = new Map();
   private lastPlayedAt: number;
   private ac: AudioContext | undefined;
   private gainNode: GainNode | undefined;
@@ -55,20 +63,18 @@ export class AudioPlayer implements Player {
       this.gainNode.gain.value = this.gain;
       this.gainNode.connect(this.ac.destination);
     }
-    const buffer = this.ac.createBuffer(
-      2,
-      leftSamples.length,
-      AudioPlayer.OUT_RATE,
-    );
-    buffer.getChannelData(0).set(leftSamples);
-    buffer.getChannelData(1).set(rightSamples);
-    let source = this.ac.createBufferSource();
-    source.buffer = buffer;
+
+    let now = this.ac.currentTime;
+    let next = this.lastPlayedAt + leftSamples.length / AudioPlayer.OUT_RATE;
+    this.lastPlayedAt = next > now ? next : now + this.timeBuffer;
+
+    const buffer = this.getBuffer(leftSamples.length);
+    buffer.copyToChannel(leftSamples as Float32Array<ArrayBuffer>, 0);
+    buffer.copyToChannel(rightSamples as Float32Array<ArrayBuffer>, 1);
+
+    let source = new AudioBufferSourceNode(this.ac, {buffer: buffer});
     source.connect(this.gainNode);
-    this.lastPlayedAt = Math.max(
-      this.lastPlayedAt + leftSamples.length / AudioPlayer.OUT_RATE,
-      this.ac.currentTime + AudioPlayer.TIME_BUFFER,
-    );
+    source.onended = () => this.returnBuffer(buffer);
     source.start(this.lastPlayedAt);
   }
 
@@ -90,5 +96,27 @@ export class AudioPlayer implements Player {
   get sampleRate(): number {
     if (this.ac) return this.ac.sampleRate;
     return 48000;
+  }
+
+  private getBuffer(length: number): AudioBuffer {
+    let items = this.pool.get(length);
+    if (items && items.length > 0) {
+      return items.pop()!;
+    }
+
+    return new AudioBuffer({
+      sampleRate: AudioPlayer.OUT_RATE,
+      numberOfChannels: 2,
+      length: length,
+    });
+  }
+
+  private returnBuffer(buffer: AudioBuffer) {
+    let items = this.pool.get(buffer.length);
+    if (!items) {
+      items = [];
+      this.pool.set(buffer.length, items);
+    }
+    items.push(buffer);
   }
 }
