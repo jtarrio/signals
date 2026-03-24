@@ -247,3 +247,62 @@ export function fftSpectrum(fft: IQ, width: number, lines: number): string {
   }
   return out.join("\n");
 }
+
+/** Applies a function piecewise to the given input and collects the output. */
+export function piecewise(
+  input: Float32Array,
+  pieceSize: number,
+  fn: (input: Float32Array) => Float32Array,
+): Float32Array {
+  let start = 0;
+  let outputs = [];
+  let outLen = 0;
+  while (start < input.length) {
+    const toCopy = Math.min(pieceSize, input.length - start);
+    const output = fn(input.subarray(start, start + toCopy));
+    outLen += output.length;
+    outputs.push(new Float32Array(output));
+    start += toCopy;
+  }
+  let output = new Float32Array(outLen);
+  let outPos = 0;
+  for (let out of outputs) {
+    output.subarray(outPos, outPos + out.length).set(out);
+    outPos += out.length;
+  }
+  return output;
+}
+
+/** Applies a function piecewise to the given I/Q input and collects the output. */
+export function iqPiecewise(
+  I: Float32Array,
+  Q: Float32Array,
+  pieceSize: number,
+  fn: (I: Float32Array, Q: Float32Array) => [Float32Array, Float32Array],
+): [Float32Array, Float32Array] {
+  let inLen = Math.min(I.length, Q.length);
+  let start = 0;
+  let outputs = [];
+  let outLen = 0;
+  while (start < inLen) {
+    const toCopy = Math.min(pieceSize, inLen - start);
+    const output = fn(
+      I.subarray(start, start + toCopy),
+      Q.subarray(start, start + toCopy),
+    );
+    outLen += output[0].length;
+    outputs.push([new Float32Array(output[0]), new Float32Array(output[1])]);
+    start += toCopy;
+  }
+  let output: [Float32Array, Float32Array] = [
+    new Float32Array(outLen),
+    new Float32Array(outLen),
+  ];
+  let outPos = 0;
+  for (let out of outputs) {
+    output[0].subarray(outPos, outPos + out[0].length).set(out[0]);
+    output[1].subarray(outPos, outPos + out[1].length).set(out[1]);
+    outPos += out[0].length;
+  }
+  return output;
+}

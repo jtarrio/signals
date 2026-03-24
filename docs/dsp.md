@@ -215,10 +215,10 @@ for (let i = 0; i < out.length; ++i) {
 
 The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains several classes that implement IIR filters:
 
-* `IIRLowPass` implements a 1-pole low-pass filter with a given corner frequency. The corner frequency has a -3dB response and rolls off at -6dB per octave and -20dB per decade.
-* `IIRLowPass2` implements a 2-pole low-pass filter with a given corner frequency and Q factor. The corner frequency's response depends on the Q factor, but then it rolls off at -12dB per octave and -40dB per decade.
-* `Deemphasis` implements a 1-pole de-emphasis filter for FM demodulation with a given time constant (given in seconds.)
-* `Preemphasis` implements a 1-pole pre-emphasis filter for FM modulation with a given time constant (given in seconds.)
+- `IIRLowPass` implements a 1-pole low-pass filter with a given corner frequency. The corner frequency has a -3dB response and rolls off at -6dB per octave and -20dB per decade.
+- `IIRLowPass2` implements a 2-pole low-pass filter with a given corner frequency and Q factor. The corner frequency's response depends on the Q factor, but then it rolls off at -12dB per octave and -40dB per decade.
+- `Deemphasis` implements a 1-pole de-emphasis filter for FM demodulation with a given time constant (given in seconds.)
+- `Preemphasis` implements a 1-pole pre-emphasis filter for FM modulation with a given time constant (given in seconds.)
 
 ```typescript
 import { Deemphasis } from "@jtarrio/signals/dsp/filters.js";
@@ -287,9 +287,37 @@ agc.inPlace(samples);
 
 ## Resampler
 
-The [`dsp/resamplers.ts`](../src/dsp/resamplers.ts) file contains a `RealDownsampler` class and a `ComplexDownsampler` class. Both classes are useful to reduce the sample rate of a real or complex signal, respectively.
+The [`dsp/resamplers.ts`](../src/dsp/resamplers.ts) contains a `getRealResampler` functions and a `getIqResampler` function. These functions return classes that reduce the sample rate of a real or complex signal, respectively.
 
-These classes work best when there is an integer ratio between the input and output sample rates. They will downsample any ratio, but they will introduce distortion because they pick the "nearest sample" instead of doing a proper upsample/downsample sequence.
+There is no requirement that the input and output rates are multiples of each other. If necessary, the filter will upsample to a common multiplier and then downsample to the output sample rate.
+
+```typescript
+import {
+  getIqResampler,
+  getRealResampler,
+} from "@jtarrio/signals/dsp/resamplers.js";
+
+const inputSampleRate = 1024000;
+const outputSampleRate = 256000;
+const kernelSize = 151;
+
+let realDownsampler = getRealResampler(inputSampleRate, outputSampleRate, {
+  taps: kernelSize,
+});
+let realInput: Float32Array = getSomeRealSamples();
+let realOutput: Float32Array = realDownsampler.resample(realInput);
+
+let complexDownsampler = getIqResampler(inputSampleRate, outputSampleRate, {
+  taps: kernelSize,
+});
+let complexInput: [Float32Array, Float32Array] = getSomeIqSamples();
+let complexOutput: [Float32Array, Float32Array] = complexDownsampler.resample(
+  complexInput[0],
+  complexInput[1],
+);
+```
+
+The [`dsp/resamplers.ts`](../src/dsp/resamplers.ts) file also contains a `RealDownsampler` class and a `ComplexDownsampler` class. Both classes are deprecated and will be deleted in the next major version of Signals; use `getRealResampler` and `getIqResampler` instead.
 
 ```typescript
 import {
@@ -304,7 +332,7 @@ const kernelSize = 151;
 let realDownsampler = new RealDownsampler(
   inputSampleRate,
   outputSampleRate,
-  kernelSize
+  kernelSize,
 );
 let realInput: Float32Array = getSomeRealSamples();
 let realOutput: Float32Array = realDownsampler.downsample(realInput);
@@ -312,12 +340,12 @@ let realOutput: Float32Array = realDownsampler.downsample(realInput);
 let complexDownsampler = new ComplexDownsampler(
   inputSampleRate,
   outputSampleRate,
-  kernelSize
+  kernelSize,
 );
 let complexInput: [Float32Array, Float32Array] = getSomeIqSamples();
 let complexOutput: [Float32Array, Float32Array] = complexDownsampler.downsample(
   complexInput[0],
-  complexInput[1]
+  complexInput[1],
 );
 ```
 
@@ -325,7 +353,7 @@ let complexOutput: [Float32Array, Float32Array] = complexDownsampler.downsample(
 
 The [`dsp/demodulators.ts`](../src/dsp/demodulators.ts) file contains several classes that implement demodulators for several schemes. All of these classes contain a `demodulate()` method that takes three `Float32Array`s with the same size: the "I" components of the input samples, the "Q" components of the input samples, and the array to store the output samples in.
 
-- `AMDemodulator` — demodulates an amplitude-modulated signal. Its constructor takes the sample rate as a parameter.
+- `AMDemodulator` — demodulates an amplitude-modulated signal. Its constructor takes the sample rate as an argument.
 - `FMDemodulator` — demodulates a frequency-modulated signal. Its constructor takes the maximum deviation as a fraction of the sample rate.
 - `SSBDemodulator` — demodulates a single-sideband signal. Its constructor takes a value that indicates which sideband is demodulated.
 
