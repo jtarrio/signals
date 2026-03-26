@@ -317,6 +317,8 @@ let complexOutput: [Float32Array, Float32Array] = complexDownsampler.resample(
 );
 ```
 
+If your output sample rate is flexible, you can use the `getGoodResampleRate(inRate, outRate, tolerance)` function to get an output sample rate that minimizes the resampling factors.
+
 The [`dsp/resamplers.ts`](../src/dsp/resamplers.ts) file also contains a `RealDownsampler` class and a `ComplexDownsampler` class. Both classes are deprecated and will be deleted in the next major version of Signals; use `getRealResampler` and `getIqResampler` instead.
 
 ```typescript

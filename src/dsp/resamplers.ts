@@ -87,52 +87,33 @@ class PureRealUpsampler implements RealResampler {
         `Non-integer upsample ratio: ${ratio}`,
         RadioErrorType.DemodulationError,
       );
-    this.delay = new FIRFilter(kernel).getDelay();
-    if (kernel.length % ratio != 0) {
-      const wantedLen = ratio * Math.ceil(kernel.length / ratio);
-      const newKernel = new Float32Array(wantedLen);
-      newKernel.subarray(wantedLen - kernel.length, wantedLen).set(kernel);
-      kernel = newKernel;
-    }
-    this.filters = [];
-    for (let i = 0; i < ratio; ++i) {
-      const filterKernel = new Float32Array(kernel.length / ratio);
-      for (let j = 0; j < filterKernel.length; ++j) {
-        filterKernel[j] = kernel[(j + 1) * ratio - i - 1] * ratio;
-      }
-      this.filters[i] = new FIRFilter(filterKernel);
-    }
+    this.filter = new Polyfilter(kernel, ratio);
     this.pool = new Float32Pool(2);
   }
 
-  private delay: number;
-  private filters: FIRFilter[];
+  private filter: Polyfilter;
   private pool: Float32Pool;
 
   resample(samples: Float32Array): Float32Array {
     const ratio = this.ratio;
     const outLen = samples.length * ratio;
     let output = this.pool.get(outLen);
-    for (let j = 0; j < ratio; ++j) {
-      this.filters[j].loadSamples(samples);
-    }
-    for (let i = 0; i < samples.length; ++i) {
-      for (let j = 0; j < ratio; ++j) {
-        output[i * ratio + j] = this.filters[j].get(i);
+    this.filter.loadSamples(samples);
+    for (let i = 0, o = 0; i < samples.length; ++i) {
+      for (let j = 0; j < ratio; ++j, ++o) {
+        output[o] = this.filter.get(j, i);
       }
     }
     return output;
   }
 
   getDelay(): number {
-    return this.delay;
+    return this.filter.getDelay();
   }
 
   clone(): PureRealUpsampler {
-    let out = new PureRealUpsampler(1, new Float32Array(1));
-    out.ratio = this.ratio;
-    out.filters = this.filters.map((f) => f.clone());
-    out.delay = this.delay;
+    let out = new PureRealUpsampler(this.ratio, new Float32Array(this.ratio));
+    out.filter = this.filter.clone();
     return out;
   }
 }
@@ -154,64 +135,53 @@ class RealUpDownsampler implements RealResampler {
         RadioErrorType.DemodulationError,
       );
 
-    this.delay = new FIRFilter(kernel).getDelay();
-    if (kernel.length % upRatio != 0) {
-      const wantedLen = upRatio * Math.ceil(kernel.length / upRatio);
-      const newKernel = new Float32Array(wantedLen);
-      newKernel.subarray(wantedLen - kernel.length, wantedLen).set(kernel);
-      kernel = newKernel;
-    }
-    this.filters = [];
-    for (let i = 0; i < upRatio; ++i) {
-      const filterKernel = new Float32Array(kernel.length / upRatio);
-      for (let j = 0; j < filterKernel.length; ++j) {
-        filterKernel[j] = kernel[(j + 1) * upRatio - i - 1] * upRatio;
-      }
-      this.filters[i] = new FIRFilter(filterKernel);
-    }
+    this.filter = new Polyfilter(kernel, upRatio);
     this.pool = new Float32Pool(4);
     this.residual = 0;
   }
 
-  private delay: number;
-  private filters: FIRFilter[];
+  private filter: Polyfilter;
   private pool: Float32Pool;
   private residual: number;
 
   resample(samples: Float32Array): Float32Array {
     const upRatio = this.upRatio;
     const midLen = samples.length * upRatio;
-    for (let j = 0; j < upRatio; ++j) {
-      this.filters[j].loadSamples(samples);
-    }
+    this.filter.loadSamples(samples);
     const downRatio = this.downRatio;
     const skip = (downRatio - this.residual) % downRatio;
     const outLen =
       Math.floor((this.residual + midLen - 1) / downRatio) -
       Math.floor((this.residual - 1) / downRatio);
     let output = this.pool.get(outLen);
+    const di = Math.floor(downRatio / upRatio);
+    const dj = downRatio % upRatio;
+    let i = Math.floor(skip / upRatio);
+    let j = skip % upRatio;
     for (let k = 0; k < outLen; ++k) {
-      const ij = skip + k * downRatio;
-      const i = Math.floor(ij / upRatio);
-      const j = ij % upRatio;
-      output[k] = this.filters[j].get(i);
+      output[k] = this.filter.get(j, i);
+      j += dj;
+      i += di;
+      if (j >= upRatio) {
+        j -= upRatio;
+        ++i;
+      }
     }
     this.residual = (this.residual + midLen) % downRatio;
     return output;
   }
 
   getDelay(): number {
-    return this.delay / this.downRatio;
+    return this.filter.getDelay() / this.downRatio;
   }
 
   clone(): RealUpDownsampler {
     let out = new RealUpDownsampler(
       this.upRatio,
       this.downRatio,
-      new Float32Array(1),
+      new Float32Array(this.upRatio),
     );
-    out.delay = this.delay;
-    out.filters = this.filters.map((f) => f.clone());
+    out.filter = this.filter.clone();
     return out;
   }
 }
@@ -246,8 +216,15 @@ export type ResamplerOptions = {
    */
   lowPassFrequency?: number;
   /**
-   * The number of taps for the filter.
+   * The number of taps that should be applied per filter "leg".
    * If unspecified, 101 taps are used.
+   */
+  tapsPerLeg?: number;
+  /**
+   * The number of taps for the filter.
+   * Takes priority over decimatedTaps, if specified.
+   * For a downscaling filter, taps == decimatedTaps.
+   * For an upscaling or rescaling filter, taps == decimatedTaps * upscaleFactor
    */
   taps?: number;
   /**
@@ -270,8 +247,9 @@ export function getRealResampler(
 ): RealResampler {
   if (inRate > outRate && inRate % outRate == 0) {
     // Pure downsampler
+    let downFactor = inRate / outRate;
     let corner = options?.lowPassFrequency || outRate / 2;
-    let taps = options?.taps || 101;
+    let taps = options?.taps || (options?.tapsPerLeg || 101) * downFactor;
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(inRate, corner, taps, gain);
@@ -279,22 +257,25 @@ export function getRealResampler(
   }
   if (inRate < outRate && outRate % inRate == 0) {
     // Pure upsampler
+    let upFactor = outRate / inRate;
     let corner = options?.lowPassFrequency || inRate / 2;
-    let taps = options?.taps || 101;
+    let taps = options?.taps || options?.tapsPerLeg || 101;
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(outRate, corner, taps, gain);
-    return new PureRealUpsampler(outRate / inRate, kernel);
+    return new PureRealUpsampler(upFactor, kernel);
   }
   // Resampler
   let gcd = greatestCommonDivisor(inRate, outRate);
+  let upFactor = outRate / gcd;
+  let downFactor = inRate / gcd;
+  let interRate = (inRate * outRate) / gcd;
   let corner = options?.lowPassFrequency || Math.min(inRate, outRate) / 2;
-  let taps = options?.taps || 101;
+  let taps = options?.taps || (options?.tapsPerLeg || 101) * downFactor;
   let gain = options?.gain;
   let kernel =
-    options?.kernel ||
-    makeLowPassKernel((inRate * outRate) / gcd, corner, taps, gain);
-  return new RealUpDownsampler(outRate / gcd, inRate / gcd, kernel);
+    options?.kernel || makeLowPassKernel(interRate, corner, taps, gain);
+  return new RealUpDownsampler(upFactor, downFactor, kernel);
 }
 
 /** Returns an IqResampler that converts signals from the input rate to the output rate. */
@@ -311,36 +292,43 @@ export function getIqResampler(
  * @deprecated Use getRealResampler() instead.
  */
 export class RealDownsampler {
-  /**
-   * @param inRate The input sample rate.
-   * @param outRate The output sample rate.
-   * @param filterSpec The size or kernel of the low-pass filter to apply to the signal before downsampling.
-   */
   constructor(
-    inRate: number,
-    outRate: number,
+    private inRate: number,
+    private outRate: number,
     filterSpec: number | Float32Array,
   ) {
-    let options =
+    this.ratio = inRate / outRate;
+    let kernel =
       typeof filterSpec === "number"
-        ? { taps: filterSpec }
-        : { kernel: filterSpec };
-    this.resampler = getRealResampler(inRate, outRate, options);
+        ? makeLowPassKernel(inRate, outRate / 2, filterSpec)
+        : filterSpec;
+    this.filter = new FIRFilter(kernel);
+    this.pool = new Float32Pool(2);
   }
 
-  private resampler: RealResampler;
+  private ratio: number;
+  private filter: FIRFilter;
+  private pool: Float32Pool;
 
-  /**
-   * Returns a downsampled version of the given samples.
-   * @param samples The sample block to downsample.
-   * @returns The downsampled block.
-   */
   downsample(samples: Float32Array): Float32Array {
-    return this.resampler.resample(samples);
+    const ratio = this.ratio;
+    const len = Math.floor(samples.length / ratio);
+    let output = this.pool.get(len);
+    this.filter.loadSamples(samples);
+    for (let i = 0; i < len; ++i) {
+      output[i] = this.filter.get(Math.floor(i * ratio));
+    }
+    return output;
   }
 
   getDelay(): number {
-    return this.resampler.getDelay();
+    return this.filter.getDelay() / this.ratio;
+  }
+
+  clone(): RealDownsampler {
+    let out = new RealDownsampler(this.inRate, this.outRate, 1);
+    out.filter = this.filter.clone();
+    return out;
   }
 }
 
@@ -359,14 +347,12 @@ export class ComplexDownsampler {
     outRate: number,
     filterSpec: number | Float32Array,
   ) {
-    let options =
-      typeof filterSpec === "number"
-        ? { taps: filterSpec }
-        : { kernel: filterSpec };
-    this.resampler = getIqResampler(inRate, outRate, options);
+    this.downI = new RealDownsampler(inRate, outRate, filterSpec);
+    this.downQ = this.downI.clone();
   }
 
-  private resampler: IqResampler;
+  private downI: RealDownsampler;
+  private downQ: RealDownsampler;
 
   /**
    * @param I The signal's real component.
@@ -374,11 +360,75 @@ export class ComplexDownsampler {
    * @returns An array with the output's real and imaginary components.
    */
   downsample(I: Float32Array, Q: Float32Array): [Float32Array, Float32Array] {
-    return this.resampler.resample(I, Q);
+    return [this.downI.downsample(I), this.downQ.downsample(Q)];
   }
 
   getDelay(): number {
-    return this.resampler.getDelay();
+    return this.downI.getDelay();
+  }
+}
+
+/**
+ * Computes an output sample rate that makes for the simplest rescaler.
+ *
+ * For example, to resample 1024000 to 336000 samples/sec,
+ * the resampler has to upsample 21x and then downsample 64x.
+ * However, with a tolerance of 50000 samples/sec, you could instead
+ * resample to 384000 samples/sec, which only requires upsampling 3x and downsampling 8x.
+ *
+ * @param inRate The input sample rate.
+ * @param outRate The desired output sample rate.
+ * @param tolerance The variation that's allowed for the sample rate (over or under the outRate).
+ * @returns The computed sample rate.
+ */
+export function getGoodResampleRate(
+  inRate: number,
+  outRate: number,
+  tolerance: number,
+): number {
+  if (inRate == outRate) return inRate;
+
+  let left = outRate - tolerance;
+  let right = outRate + tolerance;
+
+  if (left <= inRate && inRate <= right) return inRate;
+
+  if (inRate > outRate) {
+    for (let d = 2; ; ++d) {
+      let best = -1;
+      let bestDist = outRate;
+      const minM = Math.ceil((left * d) / inRate);
+      const maxM = Math.floor((right * d) / inRate);
+      for (let m = minM; m <= maxM; ++m) {
+        let target = (inRate * m) / d;
+        if (Number.isInteger(target)) {
+          let dist = Math.abs(target - outRate);
+          if (dist < bestDist || best < 0) {
+            best = target;
+            bestDist = dist;
+          }
+        }
+      }
+      if (best > 0) return best;
+    }
+  }
+
+  for (let m = 2; ; ++m) {
+    let best = -1;
+    let bestDist = outRate;
+    const minD = Math.ceil((m * inRate) / right);
+    const maxD = Math.floor((m * inRate) / left);
+    for (let d = minD; d <= maxD; ++d) {
+      let target = (inRate * m) / d;
+      if (Number.isInteger(target)) {
+        let dist = Math.abs(target - outRate);
+        if (dist < bestDist || best < 0) {
+          best = target;
+          bestDist = dist;
+        }
+      }
+    }
+    if (best > 0) return best;
   }
 }
 
@@ -390,4 +440,102 @@ function greatestCommonDivisor(a: number, b: number): number {
     [a, b] = [b, a % b];
   }
   return a;
+}
+
+/** A polyphase filter. */
+class Polyfilter {
+  constructor(kernel: Float32Array, ratio: number) {
+    this.delay = Math.floor(kernel.length / 2);
+
+    if (kernel.length % ratio != 0) {
+      const wantedLen = ratio * Math.ceil(kernel.length / ratio);
+      const newKernel = new Float32Array(wantedLen);
+      newKernel.subarray(wantedLen - kernel.length, wantedLen).set(kernel);
+      kernel = newKernel;
+    }
+    const coefLen = kernel.length / ratio;
+    this.coefs = [];
+    for (let i = 0; i < ratio; ++i) {
+      const filterKernel = new Float32Array(coefLen);
+      for (let j = 0; j < filterKernel.length; ++j) {
+        filterKernel[j] = kernel[(j + 1) * ratio - i - 1] * ratio;
+      }
+      this.coefs[i] = filterKernel;
+    }
+
+    this.offset = coefLen - 1;
+    this.pool = new Float32Pool(2, 2 * this.offset);
+    this.curSamples = this.pool.get(this.offset);
+  }
+
+  private delay: number;
+  private coefs: Float32Array[];
+  private offset: number;
+  private pool: Float32Pool;
+  private curSamples: Float32Array;
+
+  clone(): Polyfilter {
+    let out = new Polyfilter(
+      new Float32Array(this.coefs.length),
+      this.coefs.length,
+    );
+    out.delay = this.delay;
+    out.coefs = this.coefs;
+    out.offset = this.offset;
+    return out;
+  }
+
+  getDelay(): number {
+    return this.delay;
+  }
+
+  /**
+   * Loads a new block of samples to filter.
+   * @param samples The samples to load.
+   */
+  loadSamples(samples: Float32Array) {
+    const len = samples.length + this.offset;
+    if (this.curSamples.length != len) {
+      let newSamples = this.pool.get(len);
+      newSamples.set(
+        this.curSamples.subarray(this.curSamples.length - this.offset),
+      );
+      this.curSamples = newSamples;
+    } else {
+      this.curSamples.copyWithin(0, samples.length);
+    }
+    this.curSamples.set(samples, this.offset);
+  }
+
+  /**
+   * Returns a filtered sample.
+   * Be very careful when you modify this function. About 85% of the total execution
+   * time is spent here, so performance is critical.
+   * @param index The index of the sample to return, corresponding
+   *     to the same index in the latest sample block loaded via loadSamples().
+   */
+  get(phase: number, index: number): number {
+    const coefs = this.coefs[phase];
+    let i = 0;
+    let out = 0;
+    let len = coefs.length;
+    let len4 = 4 * Math.floor(len / 4);
+    while (i < len4) {
+      out +=
+        coefs[i++] * this.curSamples[index++] +
+        coefs[i++] * this.curSamples[index++] +
+        coefs[i++] * this.curSamples[index++] +
+        coefs[i++] * this.curSamples[index++];
+    }
+    let len2 = 2 * Math.floor(len / 2);
+    while (i < len2) {
+      out +=
+        coefs[i++] * this.curSamples[index++] +
+        coefs[i++] * this.curSamples[index++];
+    }
+    while (i < len) {
+      out += coefs[i++] * this.curSamples[index++];
+    }
+    return out;
+  }
 }

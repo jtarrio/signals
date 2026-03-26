@@ -62,14 +62,14 @@ import { Demod, Demodulated } from "@jtarrio/signals/demod/modes.js";
 class DemodDSB implements Demod<ModeDSB> {
   constructor(inRate: number, private outRate: number, private mode: ModeDSB) {
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = new ComplexDownsampler(inRate, outRate, 151);
+    this.downsampler = getIqResampler(inRate, outRate);
     const kernel = makeLowPassKernel(outRate, mode.bandwidth / 2, 351);
     this.filterI = new FIRFilter(kernel);
     this.filterQ = new FIRFilter(kernel);
   }
 
   private shifter: FrequencyShifter;
-  private downsampler: ComplexDownsampler;
+  private downsampler: IqResampler;
   private filterI: FIRFilter;
   private filterQ: FIRFilter;
 
@@ -90,7 +90,7 @@ class DemodDSB implements Demod<ModeDSB> {
     freqOffset: number
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
-    const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
+    const [I, Q] = this.downsampler.resample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
     this.filterI.inPlace(I);
     this.filterQ.inPlace(Q);
