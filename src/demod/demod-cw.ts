@@ -21,7 +21,7 @@ import {
   IqFIRFilter,
 } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
-import { ComplexDownsampler } from "../dsp/resamplers.js";
+import { getIqResampler, IqResampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
 
 /** Mode parameters for CW. */
@@ -57,7 +57,7 @@ export class DemodCW implements Demod<ModeCW> {
     this.audioTaps = options?.audioTaps || 351;
     const toneFrequency = options?.toneFrequency || 600;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = new ComplexDownsampler(inRate, outRate, downsamplerTaps);
+    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
     const kernel = makeLowPassKernel(
       outRate,
       mode.bandwidth / 2,
@@ -74,7 +74,7 @@ export class DemodCW implements Demod<ModeCW> {
 
   private audioTaps: number;
   private shifter: FrequencyShifter;
-  private downsampler: ComplexDownsampler;
+  private downsampler: IqResampler;
   private filter: IqFIRFilter | IqFFTFilter;
   private toneShifter: FrequencyShifter;
   private toneFrequency: number;
@@ -102,7 +102,7 @@ export class DemodCW implements Demod<ModeCW> {
     freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
-    const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
+    const [I, Q] = this.downsampler.resample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
     this.filter.inPlace(I, Q);
     let signalPower = (getPower(I, Q) * this.outRate) / this.mode.bandwidth;

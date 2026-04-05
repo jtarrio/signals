@@ -99,10 +99,8 @@ class PureRealUpsampler implements RealResampler {
     const outLen = samples.length * ratio;
     let output = this.pool.get(outLen);
     this.filter.loadSamples(samples);
-    for (let i = 0, o = 0; i < samples.length; ++i) {
-      for (let j = 0; j < ratio; ++j, ++o) {
-        output[o] = this.filter.get(j, i);
-      }
+    for (let i = 0; i < samples.length; ++i) {
+      this.filter.getAll(i, output, i * ratio);
     }
     return output;
   }
@@ -138,28 +136,33 @@ class RealUpDownsampler implements RealResampler {
     this.filter = new Polyfilter(kernel, upRatio);
     this.pool = new Float32Pool(4);
     this.residual = 0;
+    this.di = Math.floor(downRatio / upRatio);
+    this.dj = downRatio % upRatio;
   }
 
   private filter: Polyfilter;
   private pool: Float32Pool;
   private residual: number;
+  private di: number;
+  private dj: number;
 
   resample(samples: Float32Array): Float32Array {
+    const di = this.di;
+    const dj = this.dj;
     const upRatio = this.upRatio;
     const midLen = samples.length * upRatio;
-    this.filter.loadSamples(samples);
     const downRatio = this.downRatio;
-    const skip = (downRatio - this.residual) % downRatio;
     const outLen =
       Math.floor((this.residual + midLen - 1) / downRatio) -
       Math.floor((this.residual - 1) / downRatio);
-    let output = this.pool.get(outLen);
-    const di = Math.floor(downRatio / upRatio);
-    const dj = downRatio % upRatio;
+    const filter = this.filter;
+    const skip = (this.downRatio - this.residual) % downRatio;
     let i = Math.floor(skip / upRatio);
     let j = skip % upRatio;
+    let output = this.pool.get(outLen);
+    this.filter.loadSamples(samples);
     for (let k = 0; k < outLen; ++k) {
-      output[k] = this.filter.get(j, i);
+      output[k] = filter.get(j, i);
       j += dj;
       i += di;
       if (j >= upRatio) {
@@ -216,15 +219,9 @@ export type ResamplerOptions = {
    */
   lowPassFrequency?: number;
   /**
-   * The number of taps that should be applied per filter "leg".
-   * If unspecified, 101 taps are used.
-   */
-  tapsPerLeg?: number;
-  /**
-   * The number of taps for the filter.
-   * Takes priority over decimatedTaps, if specified.
-   * For a downscaling filter, taps == decimatedTaps.
-   * For an upscaling or rescaling filter, taps == decimatedTaps * upscaleFactor
+   * The number of effective output taps. This is the number of taps for a filter
+   * that would produce a similar frequency response at the output sample rate.
+   * If unspecified, 41 taps are used.
    */
   taps?: number;
   /**
@@ -237,6 +234,12 @@ export type ResamplerOptions = {
    * If unspecified, a suitable kernel for the low pass frequency and number of pass is used.
    */
   kernel?: Float32Array;
+  /**
+   * The number of taps that you would have used in RealResampler/ComplexResampler to obtain
+   * a similar frequency response.
+   * Overrides outputTaps if specified.
+   */
+  legacyTaps?: number;
 };
 
 /** Returns a RealResampler that converts signals from the input rate to the output rate. */
@@ -249,7 +252,9 @@ export function getRealResampler(
     // Pure downsampler
     let downFactor = inRate / outRate;
     let corner = options?.lowPassFrequency || outRate / 2;
-    let taps = options?.taps || (options?.tapsPerLeg || 101) * downFactor;
+    let taps = options?.legacyTaps
+      ? options?.legacyTaps
+      : (options?.taps || 41) * downFactor;
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(inRate, corner, taps, gain);
@@ -259,7 +264,9 @@ export function getRealResampler(
     // Pure upsampler
     let upFactor = outRate / inRate;
     let corner = options?.lowPassFrequency || inRate / 2;
-    let taps = options?.taps || options?.tapsPerLeg || 101;
+    let taps = options?.legacyTaps
+      ? Math.round((options?.legacyTaps * outRate) / inRate)
+      : options?.taps || 41;
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(outRate, corner, taps, gain);
@@ -271,7 +278,9 @@ export function getRealResampler(
   let downFactor = inRate / gcd;
   let interRate = (inRate * outRate) / gcd;
   let corner = options?.lowPassFrequency || Math.min(inRate, outRate) / 2;
-  let taps = options?.taps || (options?.tapsPerLeg || 101) * downFactor;
+  let taps = options?.legacyTaps
+    ? Math.round((options?.legacyTaps * outRate) / gcd)
+    : (options?.taps || 41) * downFactor;
   let gain = options?.gain;
   let kernel =
     options?.kernel || makeLowPassKernel(interRate, corner, taps, gain);
@@ -446,6 +455,7 @@ function greatestCommonDivisor(a: number, b: number): number {
 class Polyfilter {
   constructor(kernel: Float32Array, ratio: number) {
     this.delay = Math.floor(kernel.length / 2);
+    this.ratio = ratio;
 
     if (kernel.length % ratio != 0) {
       const wantedLen = ratio * Math.ceil(kernel.length / ratio);
@@ -457,7 +467,7 @@ class Polyfilter {
     this.coefs = [];
     for (let i = 0; i < ratio; ++i) {
       const filterKernel = new Float32Array(coefLen);
-      for (let j = 0; j < filterKernel.length; ++j) {
+      for (let j = 0; j < coefLen; ++j) {
         filterKernel[j] = kernel[(j + 1) * ratio - i - 1] * ratio;
       }
       this.coefs[i] = filterKernel;
@@ -469,19 +479,19 @@ class Polyfilter {
   }
 
   private delay: number;
+  private ratio: number;
   private coefs: Float32Array[];
   private offset: number;
   private pool: Float32Pool;
   private curSamples: Float32Array;
 
   clone(): Polyfilter {
-    let out = new Polyfilter(
-      new Float32Array(this.coefs.length),
-      this.coefs.length,
-    );
+    let out = new Polyfilter(new Float32Array(this.ratio), this.ratio);
     out.delay = this.delay;
     out.coefs = this.coefs;
     out.offset = this.offset;
+    out.pool = new Float32Pool(2, this.curSamples.length);
+    out.curSamples = out.pool.get(this.curSamples.length);
     return out;
   }
 
@@ -509,33 +519,68 @@ class Polyfilter {
 
   /**
    * Returns a filtered sample.
-   * Be very careful when you modify this function. About 85% of the total execution
-   * time is spent here, so performance is critical.
+   * @param phase The polyphase index.
    * @param index The index of the sample to return, corresponding
    *     to the same index in the latest sample block loaded via loadSamples().
    */
   get(phase: number, index: number): number {
     const coefs = this.coefs[phase];
+    let len = coefs.length;
+    const samples = this.curSamples;
     let i = 0;
     let out = 0;
-    let len = coefs.length;
-    let len4 = 4 * Math.floor(len / 4);
+    let len4 = len - (len % 4);
     while (i < len4) {
       out +=
-        coefs[i++] * this.curSamples[index++] +
-        coefs[i++] * this.curSamples[index++] +
-        coefs[i++] * this.curSamples[index++] +
-        coefs[i++] * this.curSamples[index++];
+        coefs[i++] * samples[index++] +
+        coefs[i++] * samples[index++] +
+        coefs[i++] * samples[index++] +
+        coefs[i++] * samples[index++];
     }
-    let len2 = 2 * Math.floor(len / 2);
+    let len2 = len - (len % 2);
     while (i < len2) {
-      out +=
-        coefs[i++] * this.curSamples[index++] +
-        coefs[i++] * this.curSamples[index++];
+      out += coefs[i++] * samples[index++] + coefs[i++] * samples[index++];
     }
     while (i < len) {
-      out += coefs[i++] * this.curSamples[index++];
+      out += coefs[i++] * samples[index++];
     }
     return out;
+  }
+
+  /**
+   * Computes all phases for a given index in one pass, writing results into output.
+   * More efficient than calling get() ratio times for the same index, as it
+   * avoids repeated function call overhead and local variable setup.
+   * @param index The sample index.
+   * @param output The output array to write into.
+   * @param outOffset The offset into output where phase 0 result is written.
+   */
+  getAll(index: number, output: Float32Array, outOffset: number): void {
+    const allCoefs = this.coefs;
+    const samples = this.curSamples;
+    let len = allCoefs[0].length;
+    let len4 = len - (len % 4);
+    let len2 = len - (len % 2);
+    const ratio = this.ratio;
+    for (let phase = 0; phase < ratio; ++phase) {
+      const coefs = allCoefs[phase];
+      let i = 0;
+      let out = 0;
+      let si = index;
+      while (i < len4) {
+        out +=
+          coefs[i++] * samples[si++] +
+          coefs[i++] * samples[si++] +
+          coefs[i++] * samples[si++] +
+          coefs[i++] * samples[si++];
+      }
+      while (i < len2) {
+        out += coefs[i++] * samples[si++] + coefs[i++] * samples[si++];
+      }
+      while (i < len) {
+        out += coefs[i++] * samples[si++];
+      }
+      output[outOffset + phase] = out;
+    }
   }
 }

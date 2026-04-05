@@ -18,7 +18,7 @@ import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { Sideband, SSBDemodulator } from "../dsp/demodulators.js";
 import { FrequencyShifter, AGC, FIRFilter, FFTFilter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
-import { ComplexDownsampler } from "../dsp/resamplers.js";
+import { getIqResampler, IqResampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
 
 /** Mode parameters for SSB. */
@@ -57,7 +57,7 @@ export class DemodSSB implements Demod<ModeSSB> {
     this.rfTaps = options?.rfTaps || 151;
     const hilbertTaps = options?.hilbertTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = new ComplexDownsampler(inRate, outRate, downsamplerTaps);
+    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
     const kernel = makeLowPassKernel(
       this.outRate,
       mode.bandwidth / 2,
@@ -77,7 +77,7 @@ export class DemodSSB implements Demod<ModeSSB> {
 
   private rfTaps: number;
   private shifter: FrequencyShifter;
-  private downsampler: ComplexDownsampler;
+  private downsampler: IqResampler;
   private filter: FIRFilter | FFTFilter;
   private demodulator: SSBDemodulator;
   private agc: AGC;
@@ -113,7 +113,7 @@ export class DemodSSB implements Demod<ModeSSB> {
     freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
-    const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
+    const [I, Q] = this.downsampler.resample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
     this.demodulator.demodulate(I, Q, I);
     this.filter.inPlace(I);

@@ -28,9 +28,9 @@ import {
 } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
 import {
-  ComplexDownsampler,
+  getIqResampler,
   getRealResampler,
-  RealDownsampler,
+  IqResampler,
   RealResampler,
 } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
@@ -131,11 +131,9 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
     const rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
     if (inRate != outRate) {
-      this.downsampler = new ComplexDownsampler(
-        inRate,
-        outRate,
-        downsamplerTaps,
-      );
+      this.downsampler = getIqResampler(inRate, outRate, {
+        legacyTaps: downsamplerTaps,
+      });
     }
     const kernel = makeLowPassKernel(outRate, maxF, rfTaps);
     this.filter = options?.useFftFilter
@@ -145,7 +143,7 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
   }
 
   private shifter: FrequencyShifter;
-  private downsampler?: ComplexDownsampler;
+  private downsampler?: IqResampler;
   private filter: IqFilter;
   private demodulator: FMDemodulator;
 
@@ -171,7 +169,7 @@ export class DemodWBFMStage1 implements Demod<ModeWBFM> {
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
     let [I, Q] = this.downsampler
-      ? this.downsampler.downsample(samplesI, samplesQ)
+      ? this.downsampler.resample(samplesI, samplesQ)
       : [samplesI, samplesQ];
     let allPower = getPower(I, Q);
     this.filter.inPlace(I, Q);
@@ -210,8 +208,11 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
       1e6;
     const audioTaps = options?.audioTaps || 41;
     const filterF = Math.min(15000, outRate / 2);
-    const kernel = makeLowPassKernel(inRate, filterF, audioTaps, 1 / 0.9);
-    this.monoSampler = new RealDownsampler(inRate, outRate, kernel);
+    this.monoSampler = getRealResampler(inRate, outRate, {
+      lowPassFrequency: filterF,
+      legacyTaps: audioTaps,
+      gain: 1 / 0.9,
+    });
     this.stereoSampler = this.monoSampler.clone();
     this.stereoSeparator = new StereoSeparator(inRate, pilotF);
     this.leftDeemph = new Deemphasis(outRate, deemphTc);
@@ -219,8 +220,8 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
     this.outPool = new Float32Pool(2, 1024);
   }
 
-  private monoSampler: RealDownsampler;
-  private stereoSampler: RealDownsampler;
+  private monoSampler: RealResampler;
+  private stereoSampler: RealResampler;
   private stereoSeparator: StereoSeparator;
   private leftDeemph: Deemphasis;
   private rightDeemph: Deemphasis;
@@ -240,12 +241,12 @@ export class DemodWBFMStage2 implements Demod<ModeWBFM> {
    * @returns The demodulated audio signal.
    */
   demodulate(samplesI: Float32Array): Demodulated {
-    let audio = this.monoSampler.downsample(samplesI);
+    let audio = this.monoSampler.resample(samplesI);
 
     if (this.mode.stereo) {
       const stereo = this.stereoSeparator.separate(samplesI);
       if (stereo.found) {
-        const diffAudio = this.stereoSampler.downsample(stereo.diff);
+        const diffAudio = this.stereoSampler.resample(stereo.diff);
         let leftAudio = this.outPool.get(audio.length);
         let rightAudio = audio;
         for (let i = 0; i < diffAudio.length; ++i) {

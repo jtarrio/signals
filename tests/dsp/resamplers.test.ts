@@ -24,52 +24,59 @@ import {
   rmsd,
   sineTone,
 } from "../testutil.js";
-import { getIqResampler, getRealResampler } from "../../src/dsp/resamplers.js";
+import {
+  getIqResampler,
+  getRealResampler,
+  RealDownsampler,
+} from "../../src/dsp/resamplers.js";
 
 test("RealDownsampler", () => {
   let input = add(
-    sineTone(800, 8000, 10, 0.1),
-    sineTone(800, 8000, 20, 0.2),
-    sineTone(800, 8000, 35, 0.3),
+    sineTone(8000, 8000, 10, 0.1),
+    sineTone(8000, 8000, 20, 0.2),
+    sineTone(8000, 8000, 35, 0.3),
   );
 
   let expected = add(
-    sineTone(80, 800, 10, 0.1),
-    sineTone(80, 800, 20, 0.2),
-    sineTone(80, 800, 35, 0.3),
+    sineTone(800, 800, 10, 0.1),
+    sineTone(800, 800, 20, 0.2),
+    sineTone(800, 800, 35, 0.3),
   );
 
-  let downsampler = getRealResampler(8000, 800, { taps: 121 });
+  let downsampler = getRealResampler(8000, 800, { taps: 120 });
   let output = piecewise(input, 64, (x) => downsampler.resample(x));
 
-  assert.approximately(downsampler.getDelay(), 6, 1e-4);
+  assert.approximately(downsampler.getDelay(), 60, 1e-4);
   assert.isAtMost(
-    rmsd(output.subarray(40, 80), expected.subarray(40 - 6, 80 - 6)),
+    rmsd(output.subarray(400, 800), expected.subarray(400 - 60, 800 - 60)),
     0.001,
   );
 });
 
 test("IqDownsampler", () => {
   let input = iqAdd(
-    iqSineTone(800, 8000, 10, 0.1),
-    iqSineTone(800, 8000, 20, 0.2),
-    iqSineTone(800, 8000, 35, 0.3),
+    iqSineTone(8000, 8000, 10, 0.1),
+    iqSineTone(8000, 8000, 20, 0.2),
+    iqSineTone(8000, 8000, 35, 0.3),
   );
 
   let expected = iqAdd(
-    iqSineTone(80, 800, 10, 0.1),
-    iqSineTone(80, 800, 20, 0.2),
-    iqSineTone(80, 800, 35, 0.3),
+    iqSineTone(800, 800, 10, 0.1),
+    iqSineTone(800, 800, 20, 0.2),
+    iqSineTone(800, 800, 35, 0.3),
   );
 
-  let downsampler = getIqResampler(8000, 800, { taps: 121 });
+  let downsampler = getIqResampler(8000, 800, { taps: 120 });
   let output = iqPiecewise(input[0], input[1], 64, (x, y) =>
     downsampler.resample(x, y),
   );
 
-  assert.approximately(downsampler.getDelay(), 6, 1e-4);
+  assert.approximately(downsampler.getDelay(), 60, 1e-4);
   assert.isAtMost(
-    iqRmsd(iqSubarray(output, 40, 80), iqSubarray(expected, 40 - 6, 80 - 6)),
+    iqRmsd(
+      iqSubarray(output, 400, 800),
+      iqSubarray(expected, 400 - 60, 800 - 60),
+    ),
     0.001,
   );
 });
@@ -138,12 +145,12 @@ test("RealResampler", () => {
     sineTone(1200, 12000, 35, 0.3),
   );
 
-  let upsampler = getRealResampler(8000, 12000, { taps: 121 });
+  let upsampler = getRealResampler(8000, 12000, { taps: 120 });
   let output = piecewise(input, 64, (x) => upsampler.resample(x));
 
-  assert.approximately(upsampler.getDelay(), 30, 1e-4);
+  assert.approximately(upsampler.getDelay(), 60, 1e-4);
   assert.isAtMost(
-    rmsd(output.subarray(600, 1200), expected.subarray(600 - 30, 1200 - 30)),
+    rmsd(output.subarray(600, 1200), expected.subarray(600 - 60, 1200 - 60)),
     0.001,
   );
 });
@@ -161,17 +168,43 @@ test("ComplexResampler", () => {
     iqSineTone(1200, 12000, 35, 0.3),
   );
 
-  let upsampler = getIqResampler(8000, 12000, { taps: 121 });
+  let upsampler = getIqResampler(8000, 12000, { taps: 120 });
   let output = iqPiecewise(input[0], input[1], 64, (x, y) =>
     upsampler.resample(x, y),
   );
 
-  assert.approximately(upsampler.getDelay(), 30, 1e-4);
+  assert.approximately(upsampler.getDelay(), 60, 1e-4);
   assert.isAtMost(
     iqRmsd(
       iqSubarray(output, 600, 1200),
-      iqSubarray(expected, 600 - 30, 1200 - 30),
+      iqSubarray(expected, 600 - 60, 1200 - 60),
     ),
     0.001,
   );
+});
+
+describe("LegacyTaps", () => {
+  const run = (inRate: number, outRate: number, taps: number) => () => {
+    let input = new Float32Array(inRate);
+    input[0] = 1;
+    const newOutput = getRealResampler(inRate, outRate, {
+      legacyTaps: taps,
+    }).resample(input);
+
+    input = new Float32Array(inRate);
+    input[0] = 1;
+    const oldOutput = new RealDownsampler(inRate, outRate, taps).downsample(
+      input,
+    );
+
+    assert.isAtMost(rmsd(newOutput, oldOutput), 5e-4);
+  };
+
+  for (let taps of [15, 17, 31, 33, 101, 151]) {
+    test(`1024k to 512k, ${taps} taps`, run(1024000, 512000, taps));
+  }
+
+  for (let taps of [15, 17, 31, 33, 101, 151]) {
+    test(`1024k to 768k, ${taps} taps`, run(1024000, 768000, taps));
+  }
 });

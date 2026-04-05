@@ -13,142 +13,154 @@
 // limitations under the License.
 
 import { bench, describe } from "vitest";
-import {
-  ComplexDownsampler,
-  getIqResampler,
-  getRealResampler,
-  RealDownsampler,
-} from "../../src/dsp/resamplers.js";
+import { getRealResampler, RealDownsampler } from "../../src/dsp/resamplers.js";
 
-describe("Downsamplers", () => {
-  const inSampleRate = 1008000;
-  const len = inSampleRate;
-  const I = new Float32Array(len).map((_) => Math.random());
-  const Q = new Float32Array(len).map((_) => Math.random());
-
-  const runReal = (len: number, outRate: number) => {
-    let downsampler = getRealResampler(inSampleRate, outRate, { taps: 151 });
-    let samples = I.subarray(0, len);
+describe("Downsampler", () => {
+  const blockNum = 20;
+  const run = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = getRealResampler(inRate, outRate, {
+      taps: 49,
+    });
     return () => {
-      downsampler.resample(samples);
+      for (let block of blocks) {
+        downsampler.resample(block);
+      }
     };
   };
 
-  const runComplex = (len: number, outRate: number) => {
-    let downsampler = getIqResampler(inSampleRate, outRate, { taps: 151 });
-    let samplesI = I.subarray(0, len);
-    let samplesQ = Q.subarray(0, len);
-    return () => {
-      downsampler.resample(samplesI, samplesQ);
-    };
-  };
-
-  describe("Real", () => {
-    for (let outRate of [28000, 112000, 336000]) {
-      describe(`1/${inSampleRate / outRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runReal(l, outRate));
-        }
-      });
-    }
-  });
-
-  describe("I/Q", () => {
-    for (let outRate of [28000, 112000, 336000]) {
-      describe(`1/${inSampleRate / outRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runComplex(l, outRate));
-        }
-      });
-    }
-  });
+  let inRate = 2048000;
+  for (let outRate of [32000, 128000, 512000, 1024000]) {
+    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
+  }
 });
 
-describe("Upsamplers", () => {
-  const inSampleRate = 28000;
-  const len = inSampleRate;
-  const I = new Float32Array(len).map((_) => Math.random());
-  const Q = new Float32Array(len).map((_) => Math.random());
-
-  const runReal = (len: number, outRate: number) => {
-    let downsampler = getRealResampler(inSampleRate, outRate, { taps: 151 });
-    let samples = I.subarray(0, len);
+describe("Upsampler", () => {
+  const blockNum = 20;
+  const run = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = getRealResampler(inRate, outRate, {
+      taps: 49,
+    });
     return () => {
-      downsampler.resample(samples);
+      for (let block of blocks) {
+        downsampler.resample(block);
+      }
     };
   };
 
-  const runComplex = (len: number, outRate: number) => {
-    let downsampler = getIqResampler(inSampleRate, outRate, { taps: 151 });
-    let samplesI = I.subarray(0, len);
-    let samplesQ = Q.subarray(0, len);
-    return () => {
-      downsampler.resample(samplesI, samplesQ);
-    };
-  };
-
-  describe("Real", () => {
-    for (let outRate of [112000, 336000, 1008000]) {
-      describe(`x${outRate / inSampleRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runReal(l, outRate));
-        }
-      });
-    }
-  });
-
-  describe("I/Q", () => {
-    for (let outRate of [112000, 336000, 1008000]) {
-      describe(`x${outRate / inSampleRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runComplex(l, outRate));
-        }
-      });
-    }
-  });
+  let inRate = 32000;
+  for (let outRate of [128000, 512000, 1024000, 2048000]) {
+    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
+  }
 });
 
-
-describe("Resamplers", () => {
-  const inSampleRate = 384000;
-  const len = inSampleRate;
-  const I = new Float32Array(len).map((_) => Math.random());
-  const Q = new Float32Array(len).map((_) => Math.random());
-
-  const runReal = (len: number, outRate: number) => {
-    let downsampler = getRealResampler(inSampleRate, outRate, { taps: 151 });
-    let samples = I.subarray(0, len);
+describe("Resampler", () => {
+  const blockNum = 20;
+  const run = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = getRealResampler(inRate, outRate, {
+      taps: 49,
+    });
     return () => {
-      downsampler.resample(samples);
+      for (let block of blocks) {
+        downsampler.resample(block);
+      }
     };
   };
 
-  const runComplex = (len: number, outRate: number) => {
-    let downsampler = getIqResampler(inSampleRate, outRate, { taps: 151 });
-    let samplesI = I.subarray(0, len);
-    let samplesQ = Q.subarray(0, len);
+  let inRate = 2048000;
+  for (let outRate of [48000, 176000, 336000, 656000]) {
+    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
+  }
+
+  inRate = 48000;
+  for (let outRate of [176000, 336000, 656000, 2048000]) {
+    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
+  }
+});
+
+describe("Original Downsampler", () => {
+  const blockNum = 20;
+  const run = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = new RealDownsampler(
+      inRate,
+      outRate,
+      Math.round((49 * inRate) / outRate),
+    );
     return () => {
-      downsampler.resample(samplesI, samplesQ);
+      for (let block of blocks) {
+        downsampler.downsample(block);
+      }
     };
   };
 
-  describe("Real", () => {
-    for (let outRate of [11025, 44100, 256000, 1024000]) {
-      describe(`${inSampleRate} -> ${outRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runReal(l, outRate));
-        }
-      });
+  let inRate = 2048000;
+  for (let outRate of [32000, 48000, 128000, 176000, 336000, 512000]) {
+    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
+  }
+});
+
+describe("Original vs New", () => {
+  const blockNum = 20;
+  const runOrig = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = new RealDownsampler(
+      inRate,
+      outRate,
+      Math.round((49 * inRate) / outRate),
+    );
+    return () => {
+      for (let block of blocks) {
+        downsampler.downsample(block);
+      }
+    };
+  };
+
+  const runNew = (inRate: number, outRate: number) => {
+    const blocks = Array.from({ length: blockNum }).map((_) =>
+      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
+    );
+    let downsampler = getRealResampler(inRate, outRate, {
+      taps: 49,
+    });
+    return () => {
+      for (let block of blocks) {
+        downsampler.resample(block);
+      }
+    };
+  };
+
+  describe(`Straight`, () => {
+    for (let inRate of [512000, 1024000, 2048000]) {
+      for (let outRate of [32000, 128000, 512000]) {
+        describe(`${inRate} -> ${outRate}`, () => {
+          bench(`Orig`, runOrig(inRate, outRate));
+          bench(`New`, runNew(inRate, outRate));
+        });
+      }
     }
   });
 
-  describe("I/Q", () => {
-    for (let outRate of [11025, 44100, 256000, 1024000]) {
-      describe(`${inSampleRate} -> ${outRate}`, () => {
-        for (let l of [64, 256, 1024, 4096]) {
-          bench(`${l}`, runComplex(l, outRate));
-        }
-      });
+  describe(`Resample`, () => {
+    for (let inRate of [512000, 1024000, 2048000]) {
+      for (let outRate of [96000, 192000, 384000]) {
+        describe(`${inRate} -> ${outRate}`, () => {
+          bench(`Orig`, runOrig(inRate, outRate));
+          bench(`New`, runNew(inRate, outRate));
+        });
+      }
     }
   });
 });

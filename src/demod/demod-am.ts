@@ -18,7 +18,7 @@ import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { AMDemodulator } from "../dsp/demodulators.js";
 import { FrequencyShifter, IqFIRFilter, IqFFTFilter } from "../dsp/filters.js";
 import { getPower } from "../dsp/power.js";
-import { ComplexDownsampler } from "../dsp/resamplers.js";
+import { getIqResampler, IqResampler } from "../dsp/resamplers.js";
 import { Configurator, Demod, Demodulated } from "./modes.js";
 
 /** Mode parameters for AM. */
@@ -51,7 +51,7 @@ export class DemodAM implements Demod<ModeAM> {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = new ComplexDownsampler(inRate, outRate, downsamplerTaps);
+    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
     const kernel = makeLowPassKernel(
       outRate,
       this.mode.bandwidth / 2,
@@ -66,7 +66,7 @@ export class DemodAM implements Demod<ModeAM> {
 
   private rfTaps: number;
   private shifter: FrequencyShifter;
-  private downsampler: ComplexDownsampler;
+  private downsampler: IqResampler;
   private filter: IqFIRFilter | IqFFTFilter;
   private demodulator: AMDemodulator;
   private outPool: Float32Pool;
@@ -98,7 +98,7 @@ export class DemodAM implements Demod<ModeAM> {
     freqOffset: number,
   ): Demodulated {
     this.shifter.inPlace(samplesI, samplesQ, -freqOffset);
-    const [I, Q] = this.downsampler.downsample(samplesI, samplesQ);
+    const [I, Q] = this.downsampler.resample(samplesI, samplesQ);
     let allPower = getPower(I, Q);
     this.filter.inPlace(I, Q);
     let signalPower = (getPower(I, Q) * this.outRate) / this.mode.bandwidth;
