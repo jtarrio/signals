@@ -81,7 +81,7 @@ describe("Resampler", () => {
   }
 
   inRate = 48000;
-  for (let outRate of [176000, 336000, 656000, 2048000]) {
+  for (let outRate of [176000, 352000, 656000, 2048000]) {
     bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
   }
 });

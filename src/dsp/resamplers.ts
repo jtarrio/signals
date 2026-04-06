@@ -87,11 +87,11 @@ class PureRealUpsampler implements RealResampler {
         `Non-integer upsample ratio: ${ratio}`,
         RadioErrorType.DemodulationError,
       );
-    this.filter = new Polyfilter(kernel, ratio);
+    this.filter = new UpsamplingPolyfilter(kernel, ratio);
     this.pool = new Float32Pool(2);
   }
 
-  private filter: Polyfilter;
+  private filter: UpsamplingPolyfilter;
   private pool: Float32Pool;
 
   resample(samples: Float32Array): Float32Array {
@@ -133,14 +133,14 @@ class RealUpDownsampler implements RealResampler {
         RadioErrorType.DemodulationError,
       );
 
-    this.filter = new Polyfilter(kernel, upRatio);
+    this.filter = new ResamplingPolyfilter(kernel, upRatio);
     this.pool = new Float32Pool(4);
     this.residual = 0;
     this.di = Math.floor(downRatio / upRatio);
     this.dj = downRatio % upRatio;
   }
 
-  private filter: Polyfilter;
+  private filter: ResamplingPolyfilter;
   private pool: Float32Pool;
   private residual: number;
   private di: number;
@@ -451,49 +451,40 @@ function greatestCommonDivisor(a: number, b: number): number {
   return a;
 }
 
-/** A polyphase filter. */
-class Polyfilter {
-  constructor(kernel: Float32Array, ratio: number) {
-    this.delay = Math.floor(kernel.length / 2);
-    this.ratio = ratio;
-
-    if (kernel.length % ratio != 0) {
-      const wantedLen = ratio * Math.ceil(kernel.length / ratio);
-      const newKernel = new Float32Array(wantedLen);
-      newKernel.subarray(wantedLen - kernel.length, wantedLen).set(kernel);
-      kernel = newKernel;
+function splitKernel(
+  kernel: Float32Array,
+  ratio: number,
+): { delay: number; coefs: Float32Array[] } {
+  let delay = Math.floor(kernel.length / 2);
+  if (kernel.length % ratio != 0) {
+    const wantedLen = ratio * Math.ceil(kernel.length / ratio);
+    const newKernel = new Float32Array(wantedLen);
+    newKernel.subarray(wantedLen - kernel.length, wantedLen).set(kernel);
+    kernel = newKernel;
+  }
+  const coefLen = kernel.length / ratio;
+  let coefs = [];
+  for (let i = 0; i < ratio; ++i) {
+    const filterKernel = new Float32Array(coefLen);
+    for (let j = 0; j < coefLen; ++j) {
+      filterKernel[j] = kernel[(j + 1) * ratio - i - 1] * ratio;
     }
-    const coefLen = kernel.length / ratio;
-    this.coefs = [];
-    for (let i = 0; i < ratio; ++i) {
-      const filterKernel = new Float32Array(coefLen);
-      for (let j = 0; j < coefLen; ++j) {
-        filterKernel[j] = kernel[(j + 1) * ratio - i - 1] * ratio;
-      }
-      this.coefs[i] = filterKernel;
-    }
+    coefs[i] = filterKernel;
+  }
+  return { delay, coefs };
+}
 
-    this.offset = coefLen - 1;
+class BasePolyfilter {
+  constructor(
+    protected offset: number,
+    protected delay: number,
+  ) {
     this.pool = new Float32Pool(2, 2 * this.offset);
     this.curSamples = this.pool.get(this.offset);
   }
 
-  private delay: number;
-  private ratio: number;
-  private coefs: Float32Array[];
-  private offset: number;
-  private pool: Float32Pool;
-  private curSamples: Float32Array;
-
-  clone(): Polyfilter {
-    let out = new Polyfilter(new Float32Array(this.ratio), this.ratio);
-    out.delay = this.delay;
-    out.coefs = this.coefs;
-    out.offset = this.offset;
-    out.pool = new Float32Pool(2, this.curSamples.length);
-    out.curSamples = out.pool.get(this.curSamples.length);
-    return out;
-  }
+  protected pool: Float32Pool;
+  protected curSamples: Float32Array;
 
   getDelay(): number {
     return this.delay;
@@ -516,6 +507,92 @@ class Polyfilter {
     }
     this.curSamples.set(samples, this.offset);
   }
+}
+
+/** A polyphase filter for upsampling. */
+class UpsamplingPolyfilter extends BasePolyfilter {
+  constructor(kernel: Float32Array, ratio: number) {
+    const { delay, coefs } = splitKernel(kernel, ratio);
+    super(coefs[0].length - 1, delay);
+    this.ratio = ratio;
+    // Change coefs[phase][i] to this.coefs[i * ratio + phase]
+    this.coefs = new Float32Array(ratio * coefs[0].length);
+    for (let i = 0; i < coefs[0].length; ++i) {
+      for (let phase = 0; phase < ratio; ++phase) {
+        this.coefs[i * ratio + phase] = coefs[phase][i];
+      }
+    }
+  }
+
+  private ratio: number;
+  private coefs: Float32Array;
+
+  clone(): UpsamplingPolyfilter {
+    let out = new UpsamplingPolyfilter(
+      new Float32Array(this.ratio),
+      this.ratio,
+    );
+    out.delay = this.delay;
+    out.coefs = this.coefs;
+    out.offset = this.offset;
+    out.pool = new Float32Pool(2, 2 * this.offset);
+    out.curSamples = out.pool.get(this.offset);
+    return out;
+  }
+
+  getAll(index: number, output: Float32Array, outOffset: number) {
+    const allCoefs = this.coefs;
+    const len = allCoefs.length;
+    const samples = this.curSamples;
+    const ratio = this.ratio;
+    const ratio4 = ratio - 3;
+
+    output.fill(0, outOffset, outOffset + ratio);
+    let si = index;
+    let pi = 0;
+    while (pi < len) {
+      const s = samples[si++];
+      let phase = 0;
+      while (phase < ratio4) {
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+      }
+      if (phase < ratio - 1) {
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+      }
+      if (phase < ratio) {
+        output[outOffset + phase++] += allCoefs[pi++] * s;
+      }
+    }
+  }
+}
+
+class ResamplingPolyfilter extends BasePolyfilter {
+  constructor(kernel: Float32Array, ratio: number) {
+    const { delay, coefs } = splitKernel(kernel, ratio);
+    super(coefs[0].length - 1, delay);
+    this.ratio = ratio;
+    this.coefs = coefs;
+  }
+
+  private ratio: number;
+  private coefs: Float32Array[];
+
+  clone(): ResamplingPolyfilter {
+    let out = new ResamplingPolyfilter(
+      new Float32Array(this.ratio),
+      this.ratio,
+    );
+    out.delay = this.delay;
+    out.coefs = this.coefs;
+    out.offset = this.offset;
+    out.pool = new Float32Pool(2, 2 * this.offset);
+    out.curSamples = out.pool.get(this.offset);
+    return out;
+  }
 
   /**
    * Returns a filtered sample.
@@ -525,11 +602,11 @@ class Polyfilter {
    */
   get(phase: number, index: number): number {
     const coefs = this.coefs[phase];
-    let len = coefs.length;
     const samples = this.curSamples;
+    let len = coefs.length;
     let i = 0;
     let out = 0;
-    let len4 = len - (len % 4);
+    let len4 = len - 3;
     while (i < len4) {
       out +=
         coefs[i++] * samples[index++] +
@@ -537,50 +614,12 @@ class Polyfilter {
         coefs[i++] * samples[index++] +
         coefs[i++] * samples[index++];
     }
-    let len2 = len - (len % 2);
-    while (i < len2) {
+    if (i < len - 1) {
       out += coefs[i++] * samples[index++] + coefs[i++] * samples[index++];
     }
-    while (i < len) {
+    if (i < len) {
       out += coefs[i++] * samples[index++];
     }
     return out;
-  }
-
-  /**
-   * Computes all phases for a given index in one pass, writing results into output.
-   * More efficient than calling get() ratio times for the same index, as it
-   * avoids repeated function call overhead and local variable setup.
-   * @param index The sample index.
-   * @param output The output array to write into.
-   * @param outOffset The offset into output where phase 0 result is written.
-   */
-  getAll(index: number, output: Float32Array, outOffset: number): void {
-    const allCoefs = this.coefs;
-    const samples = this.curSamples;
-    let len = allCoefs[0].length;
-    let len4 = len - (len % 4);
-    let len2 = len - (len % 2);
-    const ratio = this.ratio;
-    for (let phase = 0; phase < ratio; ++phase) {
-      const coefs = allCoefs[phase];
-      let i = 0;
-      let out = 0;
-      let si = index;
-      while (i < len4) {
-        out +=
-          coefs[i++] * samples[si++] +
-          coefs[i++] * samples[si++] +
-          coefs[i++] * samples[si++] +
-          coefs[i++] * samples[si++];
-      }
-      while (i < len2) {
-        out += coefs[i++] * samples[si++] + coefs[i++] * samples[si++];
-      }
-      while (i < len) {
-        out += coefs[i++] * samples[si++];
-      }
-      output[outOffset + phase] = out;
-    }
   }
 }
