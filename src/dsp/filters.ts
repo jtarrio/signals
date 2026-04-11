@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { getConvolver, Convolver } from "../wasm/convolver.js";
 import {
   Float32Pool,
   Float32RingBuffer,
@@ -177,6 +178,66 @@ export class FIRFilter implements Filter {
   }
 }
 
+/** A class to apply a FIR filter to a sequence of samples. */
+export class WasmFIRFilter implements Filter {
+  /** @param coefs The coefficients of the filter to apply. */
+  constructor(private coefs: Float32Array) {
+    this.convolver = getConvolver();
+    this.convolver.setCoefs(coefs);
+    this.offset = this.coefs.length - 1;
+    this.center = Math.floor(this.coefs.length / 2);
+    this.pool = new Float32Pool(2, 2 * this.offset);
+    this.curSamples = this.pool.get(this.offset);
+  }
+
+  private convolver: Convolver;
+  private offset: number;
+  private center: number;
+  private pool: Float32Pool;
+  private curSamples: Float32Array;
+
+  setCoefficients(coefs: Float32Array) {
+    this.convolver.setCoefs(coefs);
+    const oldSamples = this.curSamples;
+    this.coefs = coefs;
+    this.offset = this.coefs.length - 1;
+    this.center = Math.floor(this.coefs.length / 2);
+    this.curSamples = this.pool.get(this.offset);
+    this.loadSamples(oldSamples);
+  }
+
+  clone(): WasmFIRFilter {
+    return new WasmFIRFilter(this.coefs);
+  }
+
+  getDelay(): number {
+    return this.center;
+  }
+
+  inPlace(samples: Float32Array) {
+    this.loadSamples(samples);
+    samples.set(this.convolver.convolve(this.curSamples, samples.length));
+  }
+
+  /**
+   * Loads a new block of samples to filter.
+   * @param samples The samples to load.
+   */
+  loadSamples(samples: Float32Array) {
+    const len = samples.length + this.offset;
+    if (this.curSamples.length != len) {
+      let newSamples = this.pool.get(len);
+      newSamples.set(
+        this.curSamples.subarray(this.curSamples.length - this.offset),
+      );
+      this.curSamples = newSamples;
+    } else {
+      this.curSamples.copyWithin(0, samples.length);
+    }
+    this.curSamples.set(samples, this.offset);
+  }
+}
+
 /**
  * A class that applies a FIR filter using successive Fourier transforms (overlap-save.)
  *
@@ -315,6 +376,42 @@ export class IqFIRFilter {
   /** Returns a newly initialized clone of this filter. */
   clone(): IqFIRFilter {
     let out = new IqFIRFilter(new Float32Array(3));
+    out.filterI = this.filterI.clone();
+    out.filterQ = this.filterQ.clone();
+    return out;
+  }
+
+  /** Returns this filter's delay, in samples. */
+  getDelay(): number {
+    return this.filterI.getDelay();
+  }
+
+  /** Applies the filter to the input samples, in place. */
+  inPlace(I: Float32Array, Q: Float32Array) {
+    this.filterI.inPlace(I);
+    this.filterQ.inPlace(Q);
+  }
+}
+
+/** A filter that works on an IQ signal. */
+export class IqWasmFIRFilter {
+  constructor(coefs: Float32Array) {
+    this.filterI = new WasmFIRFilter(coefs);
+    this.filterQ = this.filterI.clone();
+  }
+
+  private filterI: WasmFIRFilter;
+  private filterQ: WasmFIRFilter;
+
+  /** Changes the filters' coefficients. */
+  setCoefficients(coefs: Float32Array) {
+    this.filterI.setCoefficients(coefs);
+    this.filterQ.setCoefficients(coefs);
+  }
+
+  /** Returns a newly initialized clone of this filter. */
+  clone(): IqWasmFIRFilter {
+    let out = new IqWasmFIRFilter(new Float32Array(3));
     out.filterI = this.filterI.clone();
     out.filterQ = this.filterQ.clone();
     return out;

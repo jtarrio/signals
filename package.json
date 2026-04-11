@@ -15,10 +15,13 @@
     "./dist"
   ],
   "scripts": {
-    "build": "rm -fR dist/ && tsc",
-    "test": "vitest run"
+    "build:wasm": "asc assembly/convolver.wasm.ts --target convolver && node ./scripts/embed-wasm.mjs",
+    "build": "npm run build:wasm && rm -fR dist/ && tsc",
+    "test": "npm run build:wasm && vitest run",
+    "bench": "npm run build:wasm && vitest bench -w=false"
   },
   "devDependencies": {
+    "assemblyscript": "^0.28.13",
     "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   }

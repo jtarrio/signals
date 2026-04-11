@@ -18,9 +18,11 @@ import {
   Filter,
   FIRFilter,
   FFTFilter,
+  WasmFIRFilter,
   IqFilter,
   IqFFTFilter,
   IqFIRFilter,
+  IqWasmFIRFilter,
 } from "../../src/dsp/filters.js";
 
 describe("Filters", () => {
@@ -39,6 +41,7 @@ describe("Filters", () => {
     describe(String(l), () => {
       const coefs = makeLowPassKernel(sampleRate, freq, l);
       bench("FIRFilter", run(new FIRFilter(coefs)));
+      bench("WasmFIRFilter", run(new WasmFIRFilter(coefs)));
       bench("FFTFilter", run(new FFTFilter(coefs)));
     });
   }
@@ -63,6 +66,7 @@ describe("I/Q Filters", () => {
     describe(String(l), () => {
       const coefs = makeLowPassKernel(sampleRate, freq, l);
       bench("IqFIRFilter", run(new IqFIRFilter(coefs)));
+      bench("IqWasmFIRFilter", run(new IqWasmFIRFilter(coefs)));
       bench("IqFFTFilter", run(new IqFFTFilter(coefs)));
     });
   }

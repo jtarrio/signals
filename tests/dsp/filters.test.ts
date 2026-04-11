@@ -41,6 +41,7 @@ import {
   FFTFilter,
   IqFIRFilter,
   IqFFTFilter,
+  WasmFIRFilter,
 } from "../../src/dsp/filters.js";
 import { makeLowPassKernel } from "../../src/dsp/coefficients.js";
 
@@ -101,6 +102,60 @@ test("FIRFilter", () => {
     conv(new Float32Array([0, 1, 0, 0, 1, 0])),
     new Float32Array([0, 16, 9, 5, 18, 10]),
   );
+});
+
+test("WasmFIRFilter", () => {
+  let coefs = new Float32Array([1, 2, 5, 9, 16]);
+  const conv = (signal: Float32Array) => {
+    let filter = new WasmFIRFilter(coefs);
+    filter.inPlace(signal);
+    return signal;
+  };
+
+  assert.deepEqual(
+    conv(new Float32Array([1, 0, 0, 0, 0, 0])),
+    new Float32Array([16, 9, 5, 2, 1, 0]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 1, 0, 0, 0, 0])),
+    new Float32Array([0, 16, 9, 5, 2, 1]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 0, 1, 0, 0, 0])),
+    new Float32Array([0, 0, 16, 9, 5, 2]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 0, 0, 1, 0, 0])),
+    new Float32Array([0, 0, 0, 16, 9, 5]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 0, 0, 0, 1, 0])),
+    new Float32Array([0, 0, 0, 0, 16, 9]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 0, 0, 0, 0, 1])),
+    new Float32Array([0, 0, 0, 0, 0, 16]),
+  );
+  assert.deepEqual(
+    conv(new Float32Array([0, 1, 0, 0, 1, 0])),
+    new Float32Array([0, 16, 9, 5, 18, 10]),
+  );
+});
+
+describe("JS vs WASM FIRFilter", () => {
+  let coefs = new Float32Array(151).map((_) => Math.random() * 2 - 1);
+
+  for (let len of [10, 150, 151, 152, 301, 302, 303, 512]) {
+    test(`${len}`, () => {
+      let s1 = new Float32Array(len).map((_) => Math.random() * 2 - 1);
+      let s2 = new Float32Array(s1);
+
+      new FIRFilter(coefs).inPlace(s1);
+      new WasmFIRFilter(coefs).inPlace(s2);
+
+      assert.isAtMost(rmsd(s1, s2), 5e-7);
+    });
+  }
 });
 
 test("FIRFilter symmetry", () => {
