@@ -319,38 +319,6 @@ let complexOutput: [Float32Array, Float32Array] = complexDownsampler.resample(
 
 If your output sample rate is flexible, you can use the `getGoodResampleRate(inRate, outRate, tolerance)` function to get an output sample rate that minimizes the resampling factors.
 
-The [`dsp/resamplers.ts`](../src/dsp/resamplers.ts) file also contains a `RealDownsampler` class and a `ComplexDownsampler` class. Both classes are deprecated and will be deleted in the next major version of Signals; use `getRealResampler` and `getIqResampler` instead.
-
-```typescript
-import {
-  ComplexDownsampler,
-  RealDownsampler,
-} from "@jtarrio/signals/dsp/resamplers.js";
-
-const inputSampleRate = 1024000;
-const outputSampleRate = 256000;
-const kernelSize = 151;
-
-let realDownsampler = new RealDownsampler(
-  inputSampleRate,
-  outputSampleRate,
-  kernelSize,
-);
-let realInput: Float32Array = getSomeRealSamples();
-let realOutput: Float32Array = realDownsampler.downsample(realInput);
-
-let complexDownsampler = new ComplexDownsampler(
-  inputSampleRate,
-  outputSampleRate,
-  kernelSize,
-);
-let complexInput: [Float32Array, Float32Array] = getSomeIqSamples();
-let complexOutput: [Float32Array, Float32Array] = complexDownsampler.downsample(
-  complexInput[0],
-  complexInput[1],
-);
-```
-
 ## Demodulators
 
 The [`dsp/demodulators.ts`](../src/dsp/demodulators.ts) file contains several classes that implement demodulators for several schemes. All of these classes contain a `demodulate()` method that takes three `Float32Array`s with the same size: the "I" components of the input samples, the "Q" components of the input samples, and the array to store the output samples in.

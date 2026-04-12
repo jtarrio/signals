@@ -14,9 +14,10 @@
 // limitations under the License.
 
 import { RadioError, RadioErrorType } from "../errors.js";
+import { Convolver, getConvolver } from "../wasm/convolver.js";
 import { Float32Pool } from "./buffers.js";
 import { makeLowPassKernel } from "./coefficients.js";
-import { FIRFilter } from "./filters.js";
+import { BaseWasmFirFilter, FIRFilter } from "./filters.js";
 
 /** Interface for classes that convert real signals between sample rates. */
 export interface RealResampler {
@@ -42,12 +43,12 @@ class PureRealDownsampler implements RealResampler {
         `Non-integer downsample ratio: ${ratio}`,
         RadioErrorType.DemodulationError,
       );
-    this.filter = new FIRFilter(kernel);
+    this.filter = new DownsamplingFilter(kernel);
     this.pool = new Float32Pool(2);
     this.residual = 0;
   }
 
-  private filter: FIRFilter;
+  private filter: DownsamplingFilter;
   private pool: Float32Pool;
   private residual: number;
 
@@ -58,10 +59,7 @@ class PureRealDownsampler implements RealResampler {
       Math.floor((this.residual + samples.length - 1) / ratio) -
       Math.floor((this.residual - 1) / ratio);
     let output = this.pool.get(outLen);
-    this.filter.loadSamples(samples);
-    for (let i = 0; i < outLen; ++i) {
-      output[i] = this.filter.get(skip + i * ratio);
-    }
+    output.set(this.filter.filter(samples, outLen, ratio, skip));
     this.residual = (this.residual + samples.length) % ratio;
     return output;
   }
@@ -87,21 +85,18 @@ class PureRealUpsampler implements RealResampler {
         `Non-integer upsample ratio: ${ratio}`,
         RadioErrorType.DemodulationError,
       );
-    this.filter = new UpsamplingPolyfilter(kernel, ratio);
+    this.filter = new UpsamplingFilter(kernel, ratio);
     this.pool = new Float32Pool(2);
   }
 
-  private filter: UpsamplingPolyfilter;
+  private filter: UpsamplingFilter;
   private pool: Float32Pool;
 
   resample(samples: Float32Array): Float32Array {
     const ratio = this.ratio;
     const outLen = samples.length * ratio;
     let output = this.pool.get(outLen);
-    this.filter.loadSamples(samples);
-    for (let i = 0; i < samples.length; ++i) {
-      this.filter.getAll(i, output, i * ratio);
-    }
+    output.set(this.filter.filter(samples));
     return output;
   }
 
@@ -133,43 +128,25 @@ class RealUpDownsampler implements RealResampler {
         RadioErrorType.DemodulationError,
       );
 
-    this.filter = new ResamplingPolyfilter(kernel, upRatio);
-    this.pool = new Float32Pool(4);
+    this.filter = new UpsamplingFilter(kernel, upRatio);
+    this.pool = new Float32Pool(2);
     this.residual = 0;
-    this.di = Math.floor(downRatio / upRatio);
-    this.dj = downRatio % upRatio;
   }
 
-  private filter: ResamplingPolyfilter;
+  private filter: UpsamplingFilter;
   private pool: Float32Pool;
   private residual: number;
-  private di: number;
-  private dj: number;
 
   resample(samples: Float32Array): Float32Array {
-    const di = this.di;
-    const dj = this.dj;
     const upRatio = this.upRatio;
-    const midLen = samples.length * upRatio;
     const downRatio = this.downRatio;
+    const skip = (downRatio - this.residual) % downRatio;
+    const midLen = samples.length * upRatio;
     const outLen =
       Math.floor((this.residual + midLen - 1) / downRatio) -
       Math.floor((this.residual - 1) / downRatio);
-    const filter = this.filter;
-    const skip = (this.downRatio - this.residual) % downRatio;
-    let i = Math.floor(skip / upRatio);
-    let j = skip % upRatio;
     let output = this.pool.get(outLen);
-    this.filter.loadSamples(samples);
-    for (let k = 0; k < outLen; ++k) {
-      output[k] = filter.get(j, i);
-      j += dj;
-      i += di;
-      if (j >= upRatio) {
-        j -= upRatio;
-        ++i;
-      }
-    }
+    output.set(this.filter.filterWithStride(samples, outLen, downRatio, skip));
     this.residual = (this.residual + midLen) % downRatio;
     return output;
   }
@@ -297,87 +274,6 @@ export function getIqResampler(
 }
 
 /**
- * A class to convert the input to a lower sample rate.
- * @deprecated Use getRealResampler() instead.
- */
-export class RealDownsampler {
-  constructor(
-    private inRate: number,
-    private outRate: number,
-    filterSpec: number | Float32Array,
-  ) {
-    this.ratio = inRate / outRate;
-    let kernel =
-      typeof filterSpec === "number"
-        ? makeLowPassKernel(inRate, outRate / 2, filterSpec)
-        : filterSpec;
-    this.filter = new FIRFilter(kernel);
-    this.pool = new Float32Pool(2);
-  }
-
-  private ratio: number;
-  private filter: FIRFilter;
-  private pool: Float32Pool;
-
-  downsample(samples: Float32Array): Float32Array {
-    const ratio = this.ratio;
-    const len = Math.floor(samples.length / ratio);
-    let output = this.pool.get(len);
-    this.filter.loadSamples(samples);
-    for (let i = 0; i < len; ++i) {
-      output[i] = this.filter.get(Math.floor(i * ratio));
-    }
-    return output;
-  }
-
-  getDelay(): number {
-    return this.filter.getDelay() / this.ratio;
-  }
-
-  clone(): RealDownsampler {
-    let out = new RealDownsampler(this.inRate, this.outRate, 1);
-    out.filter = this.filter.clone();
-    return out;
-  }
-}
-
-/**
- * A class to convert a complex input to a lower sample rate.
- * @deprecated Use getIqResampler() instead.
- */
-export class ComplexDownsampler {
-  /**
-   * @param inRate The input sample rate.
-   * @param outRate The output sample rate.
-   * @param filterSpec The size or kernel of the low-pass filter to apply to the signal before downsampling.
-   */
-  constructor(
-    inRate: number,
-    outRate: number,
-    filterSpec: number | Float32Array,
-  ) {
-    this.downI = new RealDownsampler(inRate, outRate, filterSpec);
-    this.downQ = this.downI.clone();
-  }
-
-  private downI: RealDownsampler;
-  private downQ: RealDownsampler;
-
-  /**
-   * @param I The signal's real component.
-   * @param Q The signal's imaginary component.
-   * @returns An array with the output's real and imaginary components.
-   */
-  downsample(I: Float32Array, Q: Float32Array): [Float32Array, Float32Array] {
-    return [this.downI.downsample(I), this.downQ.downsample(Q)];
-  }
-
-  getDelay(): number {
-    return this.downI.getDelay();
-  }
-}
-
-/**
  * Computes an output sample rate that makes for the simplest rescaler.
  *
  * For example, to resample 1024000 to 336000 samples/sec,
@@ -474,152 +370,83 @@ function splitKernel(
   return { delay, coefs };
 }
 
-class BasePolyfilter {
-  constructor(
-    protected offset: number,
-    protected delay: number,
-  ) {
-    this.pool = new Float32Pool(2, 2 * this.offset);
-    this.curSamples = this.pool.get(this.offset);
+/** A specialized filter for downsampling. */
+class DownsamplingFilter extends BaseWasmFirFilter {
+  constructor(private coefs: Float32Array) {
+    super(coefs.length - 1, Math.floor(coefs.length / 2));
+    this.convolver.setCoefs(coefs);
   }
 
-  protected pool: Float32Pool;
-  protected curSamples: Float32Array;
+  setCoefficients(coefs: Float32Array) {
+    this.convolver.setCoefs(coefs);
+    const oldSamples = this.curSamples;
+    this.coefs = coefs;
+    this.offset = this.coefs.length - 1;
+    this.delay = Math.floor(this.coefs.length / 2);
+    this.curSamples = this.pool.get(this.offset);
+    this.loadSamples(oldSamples);
+  }
+
+  clone(): DownsamplingFilter {
+    return new DownsamplingFilter(this.coefs);
+  }
 
   getDelay(): number {
     return this.delay;
   }
 
-  /**
-   * Loads a new block of samples to filter.
-   * @param samples The samples to load.
-   */
-  loadSamples(samples: Float32Array) {
-    const len = samples.length + this.offset;
-    if (this.curSamples.length != len) {
-      let newSamples = this.pool.get(len);
-      newSamples.set(
-        this.curSamples.subarray(this.curSamples.length - this.offset),
-      );
-      this.curSamples = newSamples;
-    } else {
-      this.curSamples.copyWithin(0, samples.length);
-    }
-    this.curSamples.set(samples, this.offset);
+  filter(
+    samples: Float32Array,
+    num: number,
+    stride: number,
+    offset: number,
+  ): Float32Array {
+    this.loadSamples(samples);
+    return this.convolver.convolveWithStride(
+      this.curSamples,
+      num,
+      stride,
+      offset,
+    );
   }
 }
 
-/** A polyphase filter for upsampling. */
-class UpsamplingPolyfilter extends BasePolyfilter {
-  constructor(kernel: Float32Array, ratio: number) {
+/** A specialized filter for upsampling and resampling. */
+class UpsamplingFilter extends BaseWasmFirFilter {
+  constructor(
+    private kernel: Float32Array,
+    private ratio: number,
+  ) {
     const { delay, coefs } = splitKernel(kernel, ratio);
     super(coefs[0].length - 1, delay);
-    this.ratio = ratio;
-    // Change coefs[phase][i] to this.coefs[i * ratio + phase]
-    this.coefs = new Float32Array(ratio * coefs[0].length);
-    for (let i = 0; i < coefs[0].length; ++i) {
-      for (let phase = 0; phase < ratio; ++phase) {
-        this.coefs[i * ratio + phase] = coefs[phase][i];
-      }
-    }
+    this.convolver.setCoefArray(coefs);
   }
 
-  private ratio: number;
-  private coefs: Float32Array;
+  clone(): UpsamplingFilter {
+    return new UpsamplingFilter(this.kernel, this.ratio);
+  }
 
-  clone(): UpsamplingPolyfilter {
-    let out = new UpsamplingPolyfilter(
-      new Float32Array(this.ratio),
+  filter(samples: Float32Array): Float32Array {
+    this.loadSamples(samples);
+    return this.convolver.convolveExpanding(
+      this.curSamples,
+      samples.length,
       this.ratio,
     );
-    out.delay = this.delay;
-    out.coefs = this.coefs;
-    out.offset = this.offset;
-    out.pool = new Float32Pool(2, 2 * this.offset);
-    out.curSamples = out.pool.get(this.offset);
-    return out;
   }
 
-  getAll(index: number, output: Float32Array, outOffset: number) {
-    const allCoefs = this.coefs;
-    const len = allCoefs.length;
-    const samples = this.curSamples;
-    const ratio = this.ratio;
-    const ratio4 = ratio - 3;
-
-    output.fill(0, outOffset, outOffset + ratio);
-    let si = index;
-    let pi = 0;
-    while (pi < len) {
-      const s = samples[si++];
-      let phase = 0;
-      while (phase < ratio4) {
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-      }
-      if (phase < ratio - 1) {
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-      }
-      if (phase < ratio) {
-        output[outOffset + phase++] += allCoefs[pi++] * s;
-      }
-    }
-  }
-}
-
-class ResamplingPolyfilter extends BasePolyfilter {
-  constructor(kernel: Float32Array, ratio: number) {
-    const { delay, coefs } = splitKernel(kernel, ratio);
-    super(coefs[0].length - 1, delay);
-    this.ratio = ratio;
-    this.coefs = coefs;
-  }
-
-  private ratio: number;
-  private coefs: Float32Array[];
-
-  clone(): ResamplingPolyfilter {
-    let out = new ResamplingPolyfilter(
-      new Float32Array(this.ratio),
-      this.ratio,
+  filterWithStride(
+    samples: Float32Array,
+    num: number,
+    stride: number,
+    offset: number,
+  ): Float32Array {
+    this.loadSamples(samples);
+    return this.convolver.convolveExpandingWithStride(
+      this.curSamples,
+      num,
+      stride,
+      offset,
     );
-    out.delay = this.delay;
-    out.coefs = this.coefs;
-    out.offset = this.offset;
-    out.pool = new Float32Pool(2, 2 * this.offset);
-    out.curSamples = out.pool.get(this.offset);
-    return out;
-  }
-
-  /**
-   * Returns a filtered sample.
-   * @param phase The polyphase index.
-   * @param index The index of the sample to return, corresponding
-   *     to the same index in the latest sample block loaded via loadSamples().
-   */
-  get(phase: number, index: number): number {
-    const coefs = this.coefs[phase];
-    const samples = this.curSamples;
-    let len = coefs.length;
-    let i = 0;
-    let out = 0;
-    let len4 = len - 3;
-    while (i < len4) {
-      out +=
-        coefs[i++] * samples[index++] +
-        coefs[i++] * samples[index++] +
-        coefs[i++] * samples[index++] +
-        coefs[i++] * samples[index++];
-    }
-    if (i < len - 1) {
-      out += coefs[i++] * samples[index++] + coefs[i++] * samples[index++];
-    }
-    if (i < len) {
-      out += coefs[i++] * samples[index++];
-    }
-    return out;
   }
 }

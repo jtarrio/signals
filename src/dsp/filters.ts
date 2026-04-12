@@ -32,29 +32,60 @@ export interface Filter {
   inPlace(samples: Float32Array): void;
 }
 
-/** A class to apply a FIR filter to a sequence of samples. */
-export class FIRFilter implements Filter {
+/** A base implementation for FIR filters that uses WASM for convolution. */
+export class BaseWasmFirFilter {
   /** @param coefs The coefficients of the filter to apply. */
-  constructor(private coefs: Float32Array) {
-    this.offset = this.coefs.length - 1;
-    this.center = Math.floor(this.coefs.length / 2);
+  constructor(
+    protected offset: number,
+    protected delay: number,
+  ) {
     this.pool = new Float32Pool(2, 2 * this.offset);
     this.curSamples = this.pool.get(this.offset);
-    this.get = this.isSymmetric() ? this.getS : this.getNS;
+    this.convolver = getConvolver();
   }
 
-  private offset: number;
-  private center: number;
-  private pool: Float32Pool;
-  private curSamples: Float32Array;
+  protected pool: Float32Pool;
+  protected curSamples: Float32Array;
+  protected convolver: Convolver;
+
+  getDelay(): number {
+    return this.delay;
+  }
+
+  /**
+   * Loads a new block of samples to filter.
+   * @param samples The samples to load.
+   */
+  loadSamples(samples: Float32Array) {
+    const len = samples.length + this.offset;
+    if (this.curSamples.length != len) {
+      let newSamples = this.pool.get(len);
+      newSamples.set(
+        this.curSamples.subarray(this.curSamples.length - this.offset),
+      );
+      this.curSamples = newSamples;
+    } else {
+      this.curSamples.copyWithin(0, samples.length);
+    }
+    this.curSamples.set(samples, this.offset);
+  }
+}
+
+/** A class to apply a FIR filter to a sequence of samples. */
+export class FIRFilter extends BaseWasmFirFilter implements Filter {
+  /** @param coefs The coefficients of the filter to apply. */
+  constructor(private coefs: Float32Array) {
+    super(coefs.length - 1, Math.floor(coefs.length / 2));
+    this.convolver.setCoefs(coefs);
+  }
 
   setCoefficients(coefs: Float32Array) {
+    this.convolver.setCoefs(coefs);
     const oldSamples = this.curSamples;
     this.coefs = coefs;
     this.offset = this.coefs.length - 1;
-    this.center = Math.floor(this.coefs.length / 2);
+    this.delay = Math.floor(this.coefs.length / 2);
     this.curSamples = this.pool.get(this.offset);
-    this.get = this.isSymmetric() ? this.getS : this.getNS;
     this.loadSamples(oldSamples);
   }
 
@@ -63,178 +94,12 @@ export class FIRFilter implements Filter {
   }
 
   getDelay(): number {
-    return this.center;
-  }
-
-  inPlace(samples: Float32Array) {
-    this.loadSamples(samples);
-    for (let i = 0; i < samples.length; ++i) {
-      samples[i] = this.get(i);
-    }
-  }
-
-  /**
-   * Loads a new block of samples to filter.
-   * @param samples The samples to load.
-   */
-  loadSamples(samples: Float32Array) {
-    const len = samples.length + this.offset;
-    if (this.curSamples.length != len) {
-      let newSamples = this.pool.get(len);
-      newSamples.set(
-        this.curSamples.subarray(this.curSamples.length - this.offset),
-      );
-      this.curSamples = newSamples;
-    } else {
-      this.curSamples.copyWithin(0, samples.length);
-    }
-    this.curSamples.set(samples, this.offset);
-  }
-
-  /**
-   * Returns a filtered sample.
-   * @param index The index of the sample to return, corresponding
-   *     to the same index in the latest sample block loaded via loadSamples().
-   */
-  get: (index: number) => number = this.getNS;
-
-  /**
-   * Version of get() for non-symmetrical coefficients.
-   * Be very careful when you modify this function. About 85% of the total execution
-   * time is spent here, so performance is critical.
-   */
-  private getNS(index: number): number {
-    let i = 0;
-    let out = 0;
-    let len = this.coefs.length;
-    let len4 = 4 * Math.floor(len / 4);
-    while (i < len4) {
-      out +=
-        this.coefs[i++] * this.curSamples[index++] +
-        this.coefs[i++] * this.curSamples[index++] +
-        this.coefs[i++] * this.curSamples[index++] +
-        this.coefs[i++] * this.curSamples[index++];
-    }
-    let len2 = 2 * Math.floor(len / 2);
-    while (i < len2) {
-      out +=
-        this.coefs[i++] * this.curSamples[index++] +
-        this.coefs[i++] * this.curSamples[index++];
-    }
-    while (i < len) {
-      out += this.coefs[i++] * this.curSamples[index++];
-    }
-    return out;
-  }
-
-  /** Version of get() for symmetric coefficients. */
-  private getS(index: number): number {
-    let i = 0;
-    let out = 0;
-    let hlen = this.coefs.length / 2;
-    let fhlen = Math.floor(this.coefs.length / 2);
-    let lo = index;
-    let hi = index + this.coefs.length - 1;
-    let hlen4 = 4 * Math.floor(hlen / 4);
-    while (i < hlen4) {
-      out +=
-        this.coefs[i + 0] *
-          (this.curSamples[lo + 0] + this.curSamples[hi - 0]) +
-        this.coefs[i + 1] *
-          (this.curSamples[lo + 1] + this.curSamples[hi - 1]) +
-        this.coefs[i + 2] *
-          (this.curSamples[lo + 2] + this.curSamples[hi - 2]) +
-        this.coefs[i + 3] * (this.curSamples[lo + 3] + this.curSamples[hi - 3]);
-      i += 4;
-      lo += 4;
-      hi -= 4;
-    }
-    let hlen2 = 2 * Math.floor(hlen / 2);
-    while (i < hlen2) {
-      out +=
-        this.coefs[i + 0] *
-          (this.curSamples[lo + 0] + this.curSamples[hi - 0]) +
-        this.coefs[i + 1] * (this.curSamples[lo + 1] + this.curSamples[hi - 1]);
-      i += 2;
-      lo += 2;
-      hi -= 2;
-    }
-    while (i < fhlen) {
-      out += this.coefs[i++] * (this.curSamples[lo++] + this.curSamples[hi--]);
-    }
-    if (fhlen != hlen) {
-      out += this.coefs[i++] * this.curSamples[lo++];
-    }
-    return out;
-  }
-
-  private isSymmetric(): boolean {
-    const len = this.coefs.length - 1;
-    const hlen = Math.floor(this.coefs.length / 2);
-    for (let i = 0; i < hlen; ++i) {
-      if (this.coefs[i] !== this.coefs[len - i]) return false;
-    }
-    return true;
-  }
-}
-
-/** A class to apply a FIR filter to a sequence of samples. */
-export class WasmFIRFilter implements Filter {
-  /** @param coefs The coefficients of the filter to apply. */
-  constructor(private coefs: Float32Array) {
-    this.convolver = getConvolver();
-    this.convolver.setCoefs(coefs);
-    this.offset = this.coefs.length - 1;
-    this.center = Math.floor(this.coefs.length / 2);
-    this.pool = new Float32Pool(2, 2 * this.offset);
-    this.curSamples = this.pool.get(this.offset);
-  }
-
-  private convolver: Convolver;
-  private offset: number;
-  private center: number;
-  private pool: Float32Pool;
-  private curSamples: Float32Array;
-
-  setCoefficients(coefs: Float32Array) {
-    this.convolver.setCoefs(coefs);
-    const oldSamples = this.curSamples;
-    this.coefs = coefs;
-    this.offset = this.coefs.length - 1;
-    this.center = Math.floor(this.coefs.length / 2);
-    this.curSamples = this.pool.get(this.offset);
-    this.loadSamples(oldSamples);
-  }
-
-  clone(): WasmFIRFilter {
-    return new WasmFIRFilter(this.coefs);
-  }
-
-  getDelay(): number {
-    return this.center;
+    return this.delay;
   }
 
   inPlace(samples: Float32Array) {
     this.loadSamples(samples);
     samples.set(this.convolver.convolve(this.curSamples, samples.length));
-  }
-
-  /**
-   * Loads a new block of samples to filter.
-   * @param samples The samples to load.
-   */
-  loadSamples(samples: Float32Array) {
-    const len = samples.length + this.offset;
-    if (this.curSamples.length != len) {
-      let newSamples = this.pool.get(len);
-      newSamples.set(
-        this.curSamples.subarray(this.curSamples.length - this.offset),
-      );
-      this.curSamples = newSamples;
-    } else {
-      this.curSamples.copyWithin(0, samples.length);
-    }
-    this.curSamples.set(samples, this.offset);
   }
 }
 
@@ -376,42 +241,6 @@ export class IqFIRFilter {
   /** Returns a newly initialized clone of this filter. */
   clone(): IqFIRFilter {
     let out = new IqFIRFilter(new Float32Array(3));
-    out.filterI = this.filterI.clone();
-    out.filterQ = this.filterQ.clone();
-    return out;
-  }
-
-  /** Returns this filter's delay, in samples. */
-  getDelay(): number {
-    return this.filterI.getDelay();
-  }
-
-  /** Applies the filter to the input samples, in place. */
-  inPlace(I: Float32Array, Q: Float32Array) {
-    this.filterI.inPlace(I);
-    this.filterQ.inPlace(Q);
-  }
-}
-
-/** A filter that works on an IQ signal. */
-export class IqWasmFIRFilter {
-  constructor(coefs: Float32Array) {
-    this.filterI = new WasmFIRFilter(coefs);
-    this.filterQ = this.filterI.clone();
-  }
-
-  private filterI: WasmFIRFilter;
-  private filterQ: WasmFIRFilter;
-
-  /** Changes the filters' coefficients. */
-  setCoefficients(coefs: Float32Array) {
-    this.filterI.setCoefficients(coefs);
-    this.filterQ.setCoefficients(coefs);
-  }
-
-  /** Returns a newly initialized clone of this filter. */
-  clone(): IqWasmFIRFilter {
-    let out = new IqWasmFIRFilter(new Float32Array(3));
     out.filterI = this.filterI.clone();
     out.filterQ = this.filterQ.clone();
     return out;

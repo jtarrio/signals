@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { bench, describe } from "vitest";
-import { getRealResampler, RealDownsampler } from "../../src/dsp/resamplers.js";
+import { getRealResampler } from "../../src/dsp/resamplers.js";
 
 describe("Downsampler", () => {
   const blockNum = 20;
@@ -75,92 +75,17 @@ describe("Resampler", () => {
     };
   };
 
-  let inRate = 2048000;
-  for (let outRate of [48000, 176000, 336000, 656000]) {
-    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
-  }
-
-  inRate = 48000;
-  for (let outRate of [176000, 352000, 656000, 2048000]) {
-    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
-  }
-});
-
-describe("Original Downsampler", () => {
-  const blockNum = 20;
-  const run = (inRate: number, outRate: number) => {
-    const blocks = Array.from({ length: blockNum }).map((_) =>
-      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
-    );
-    let downsampler = new RealDownsampler(
-      inRate,
-      outRate,
-      Math.round((49 * inRate) / outRate),
-    );
-    return () => {
-      for (let block of blocks) {
-        downsampler.downsample(block);
-      }
-    };
-  };
-
-  let inRate = 2048000;
-  for (let outRate of [32000, 48000, 128000, 176000, 336000, 512000]) {
-    bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
-  }
-});
-
-describe("Original vs New", () => {
-  const blockNum = 20;
-  const runOrig = (inRate: number, outRate: number) => {
-    const blocks = Array.from({ length: blockNum }).map((_) =>
-      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
-    );
-    let downsampler = new RealDownsampler(
-      inRate,
-      outRate,
-      Math.round((49 * inRate) / outRate),
-    );
-    return () => {
-      for (let block of blocks) {
-        downsampler.downsample(block);
-      }
-    };
-  };
-
-  const runNew = (inRate: number, outRate: number) => {
-    const blocks = Array.from({ length: blockNum }).map((_) =>
-      new Float32Array(Math.floor(inRate / blockNum)).map((_) => Math.random()),
-    );
-    let downsampler = getRealResampler(inRate, outRate, {
-      taps: 49,
-    });
-    return () => {
-      for (let block of blocks) {
-        downsampler.resample(block);
-      }
-    };
-  };
-
-  describe(`Straight`, () => {
-    for (let inRate of [512000, 1024000, 2048000]) {
-      for (let outRate of [32000, 128000, 512000]) {
-        describe(`${inRate} -> ${outRate}`, () => {
-          bench(`Orig`, runOrig(inRate, outRate));
-          bench(`New`, runNew(inRate, outRate));
-        });
-      }
+  describe("Net down", () => {
+    let inRate = 2048000;
+    for (let outRate of [48000, 176000, 336000, 656000]) {
+      bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
     }
   });
 
-  describe(`Resample`, () => {
-    for (let inRate of [512000, 1024000, 2048000]) {
-      for (let outRate of [96000, 192000, 384000]) {
-        describe(`${inRate} -> ${outRate}`, () => {
-          bench(`Orig`, runOrig(inRate, outRate));
-          bench(`New`, runNew(inRate, outRate));
-        });
-      }
+  describe("Net up", () => {
+    let inRate = 48000;
+    for (let outRate of [176000, 352000, 656000, 2048000]) {
+      bench(`${inRate} -> ${outRate}`, run(inRate, outRate));
     }
   });
 });

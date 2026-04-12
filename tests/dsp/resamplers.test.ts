@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { test, assert, describe } from "vitest";
+import { test, assert } from "vitest";
 import {
   add,
   iqAdd,
@@ -24,11 +24,7 @@ import {
   rmsd,
   sineTone,
 } from "../testutil.js";
-import {
-  getIqResampler,
-  getRealResampler,
-  RealDownsampler,
-} from "../../src/dsp/resamplers.js";
+import { getIqResampler, getRealResampler } from "../../src/dsp/resamplers.js";
 
 test("RealDownsampler", () => {
   let input = add(
@@ -181,30 +177,4 @@ test("ComplexResampler", () => {
     ),
     0.001,
   );
-});
-
-describe("LegacyTaps", () => {
-  const run = (inRate: number, outRate: number, taps: number) => () => {
-    let input = new Float32Array(inRate);
-    input[0] = 1;
-    const newOutput = getRealResampler(inRate, outRate, {
-      legacyTaps: taps,
-    }).resample(input);
-
-    input = new Float32Array(inRate);
-    input[0] = 1;
-    const oldOutput = new RealDownsampler(inRate, outRate, taps).downsample(
-      input,
-    );
-
-    assert.isAtMost(rmsd(newOutput, oldOutput), 5e-4);
-  };
-
-  for (let taps of [15, 17, 31, 33, 101, 151]) {
-    test(`1024k to 512k, ${taps} taps`, run(1024000, 512000, taps));
-  }
-
-  for (let taps of [15, 17, 31, 33, 101, 151]) {
-    test(`1024k to 768k, ${taps} taps`, run(1024000, 768000, taps));
-  }
 });
