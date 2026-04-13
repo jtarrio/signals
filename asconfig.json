@@ -7,6 +7,14 @@
       "shrinkLevel": 0,
       "converge": false,
       "noAssert": false
+    },
+    "fft": {
+      "outFile": "src/wasm/fft.wasm",
+      "textFile": "src/wasm/fft.wat",
+      "optimizeLevel": 3,
+      "shrinkLevel": 0,
+      "converge": false,
+      "noAssert": false
     }
   },
   "options": {

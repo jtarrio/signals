@@ -15,7 +15,7 @@
     "./dist"
   ],
   "scripts": {
-    "build:wasm": "asc assembly/convolver.wasm.ts --target convolver && node ./scripts/embed-wasm.mjs",
+    "build:wasm": "asc assembly/convolver.wasm.ts --target convolver && asc assembly/fft.wasm.ts --target fft && node ./scripts/embed-wasm.mjs",
     "build": "npm run build:wasm && rm -fR dist/ && tsc",
     "test": "npm run build:wasm && vitest run",
     "bench": "npm run build:wasm && vitest bench -w=false"

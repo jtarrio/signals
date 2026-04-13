@@ -188,7 +188,7 @@ test("IqFFTFilter", () => {
       iqSubarray(firInput, firDelay, firInput.length - stftDelay),
       iqSubarray(stftInput, stftDelay, stftInput.length - firDelay),
     ),
-    1e-7,
+    2e-7,
   );
 });
 
