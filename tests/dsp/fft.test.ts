@@ -116,3 +116,21 @@ test("roundtrip", () => {
 
   assert.isAtMost(iqRmsd(output, input), 1e-7);
 });
+
+
+test("realRoundtrip", () => {
+  const sampleRate = 4096;
+  let fft = RealFFT.ofLength(sampleRate);
+  let input = new Float32Array(fft.length) as Float32Array;
+  for (let f = 0; f < fft.length / 2; ++f) {
+    input = add(
+      input,
+      sineTone(sampleRate, sampleRate, f, 1 / fft.length, f),
+    );
+  }
+
+  let middle = fft.transform(input);
+  let output = fft.reverse(middle[0], middle[1]);
+
+  assert.isAtMost(rmsd(output, input), 1e-7);
+});

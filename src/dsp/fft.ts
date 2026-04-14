@@ -146,25 +146,21 @@ export class RealFFT {
   }
 
   private constructor(public length: number) {
-    this.halfFft = FFT.ofLength(length / 2);
-    this.out = new IqPool(4, length);
-    this.outReal = new Float32Pool(4, length);
-    this.coefReal = new Float32Array(length / 2 + 1);
-    this.coefImag = new Float32Array(length / 2 + 1);
-    for (let k = 0; k <= length / 2; ++k) {
-      const angle = (-2 * Math.PI * k) / length;
-      this.coefReal[k] = Math.cos(angle);
-      this.coefImag[k] = Math.sin(angle);
-    }
-    this.copyEven = new Float32Array(length / 2);
-    this.copyOdd = new Float32Array(length / 2);
+    const halfLen = length / 2;
+    this.revIndex = reversedBitIndices(halfLen);
+    this.wasmFft = getWasmFft();
+    this.wasmFft.setCoefs(makeFftCoefficients(halfLen));
+    this.wasmFft.setExpnCoefs(makeExpnFftCoefficients(halfLen));
+    this.copyEven = new Float32Array(halfLen);
+    this.copyOdd = new Float32Array(halfLen);
+    this.out = new IqPool(2, halfLen);
+    this.outReal = new Float32Pool(2, length);
   }
 
-  private halfFft: FFT;
+  private revIndex: Int32Array;
+  private wasmFft: WasmFft;
   private out: IqPool;
   private outReal: Float32Pool;
-  private coefReal: Float32Array;
-  private coefImag: Float32Array;
   private copyEven: Float32Array;
   private copyOdd: Float32Array;
 
@@ -174,41 +170,18 @@ export class RealFFT {
    * @return The output of the transform.
    */
   transform(real: Float32Array): FFTOutput {
-    const coefReal = this.coefReal;
-    const coefImag = this.coefImag;
-    const even = this.copyEven;
-    const odd = this.copyOdd;
-
     const len = this.length;
-    const hlen = this.length / 2;
+    const hlen = len / 2;
     for (let i = 0; i < hlen; ++i) {
-      even[i] = real[2 * i];
-      odd[i] = real[2 * i + 1];
+      const ri = this.revIndex[i];
+      this.copyEven[ri] = real[2 * i] / hlen;
+      this.copyOdd[ri] = real[2 * i + 1] / hlen;
     }
-    const [fftReal, fftImag] = this.halfFft.transform(even, odd);
+    this.wasmFft.fft(this.copyEven, this.copyOdd, false);
+    const res = this.wasmFft.realFftPost();
     const out = this.out.get(len);
-    const outReal = out[0];
-    const outImag = out[1];
-    outReal[0] = (fftReal[0] + fftImag[0]) * 0.5;
-    outImag[0] = 0;
-    outReal[hlen] = (fftReal[0] - fftImag[0]) * 0.5;
-    outImag[hlen] = 0;
-    for (let i = 1; i < hlen; ++i) {
-      const cr = coefReal[i];
-      const ci = coefImag[i];
-      const sr = fftReal[i] + fftReal[hlen - i];
-      const si = fftImag[i] - fftImag[hlen - i];
-      const dr = fftReal[i] - fftReal[hlen - i];
-      const di = fftImag[i] + fftImag[hlen - i];
-      const xr = (sr + cr * di + ci * dr) * 0.25;
-      const xi = (si - cr * dr + ci * di) * 0.25;
-
-      outReal[i] = xr;
-      outImag[i] = xi;
-      outReal[len - i] = xr;
-      outImag[len - i] = -xi;
-    }
-
+    out[0].set(res[0]);
+    out[1].set(res[1]);
     return out;
   }
 
@@ -220,28 +193,15 @@ export class RealFFT {
    * @return The real output of the reverse transform.
    */
   reverse(real: Float32Array, imag: Float32Array): Float32Array {
-    const coefReal = this.coefReal;
-    const coefImag = this.coefImag;
-    const fftReal = this.copyEven;
-    const fftImag = this.copyOdd;
     const len = this.length;
     const hlen = len / 2;
-
-    fftReal[0] = real[0] + real[hlen];
-    fftImag[0] = real[0] - real[hlen];
-
-    for (let i = 1; i < hlen; ++i) {
-      const cr = coefReal[i];
-      const ci = coefImag[i];
-      const sr = real[i] + real[hlen - i];
-      const si = imag[i] - imag[hlen - i];
-      const dr = real[i] - real[hlen - i];
-      const di = imag[i] + imag[hlen - i];
-      fftReal[i] = sr - cr * di + ci * dr;
-      fftImag[i] = si + cr * dr + ci * di;
+    const [preEven, preOdd] = this.wasmFft.reverseRealFftPre(real, imag);
+    for (let i = 0; i < hlen; ++i) {
+      const ri = this.revIndex[i];
+      this.copyEven[ri] = preEven[i];
+      this.copyOdd[ri] = preOdd[i];
     }
-
-    const [outEven, outOdd] = this.halfFft.reverse(fftReal, fftImag);
+    const [outEven, outOdd] = this.wasmFft.fft(this.copyEven, this.copyOdd, true);
     const out = this.outReal.get(len);
     for (let i = 0; i < hlen; ++i) {
       out[2 * i] = outEven[i];
@@ -277,6 +237,19 @@ function makeFftCoefficients(length: number): Float32Array {
     }
   }
 
+  return coefs;
+}
+
+/** Builds an array of expanding/collapsing coefficients for the real FFT. */
+function makeExpnFftCoefficients(halfLen: number): Float32Array {
+  let coefs = new Float32Array(2 * (halfLen + 1));
+  let offset = 0;
+  for (let k = 0; k < halfLen; ++k) {
+    coefs[offset++] = Math.cos((-Math.PI * k) / halfLen);
+  }
+  for (let k = 0; k < halfLen; ++k) {
+    coefs[offset++] = Math.sin((-Math.PI * k) / halfLen);
+  }
   return coefs;
 }
 

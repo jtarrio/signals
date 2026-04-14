@@ -4,11 +4,16 @@ let fftModule = new WebAssembly.Module(Wasm.FFT);
 
 type FftInterface = {
   memory: WebAssembly.Memory;
+  getFftLength: () => number;
   coefsPtr: (numCoefs: number) => number;
   realDataPtr: () => number;
   imagDataPtr: () => number;
+  expnCoefsPtr: () => number;
+  expnRealDataPtr: () => number;
+  expnImagDataPtr: () => number;
   fft: (reverse: boolean) => void;
-  postRealFft: () => void;
+  expandRealFft: () => void;
+  collapseRealFft: () => void;
 };
 
 function checkPtr(ptr: number): number {
@@ -24,23 +29,52 @@ export class WasmFft {
     new Float32Array(this.wasm.memory.buffer, ptr, coefs.length).set(coefs);
   }
 
+  setExpnCoefs(coefs: Float32Array) {
+    const ptr = checkPtr(this.wasm.expnCoefsPtr());
+    new Float32Array(this.wasm.memory.buffer, ptr, coefs.length).set(coefs);
+  }
+
   fft(
     real: Float32Array,
     imag: Float32Array,
     reverse: boolean,
   ): [Float32Array, Float32Array] {
+    const len = this.wasm.getFftLength();
     const realPtr = this.wasm.realDataPtr();
     const imagPtr = this.wasm.imagDataPtr();
-    let r = new Float32Array(this.wasm.memory.buffer, realPtr, real.length);
-    let i = new Float32Array(this.wasm.memory.buffer, imagPtr, imag.length);
+    let r = new Float32Array(this.wasm.memory.buffer, realPtr, len);
+    let i = new Float32Array(this.wasm.memory.buffer, imagPtr, len);
     r.set(real);
     i.set(imag);
     this.wasm.fft(reverse);
     return [r, i];
   }
 
-  postRealFft() {
-    this.wasm.postRealFft();
+  realFftPost(): [Float32Array, Float32Array] {
+    let len = this.wasm.getFftLength();
+    this.wasm.expandRealFft();
+    const outRealPtr = this.wasm.expnRealDataPtr();
+    const outImagPtr = this.wasm.expnImagDataPtr();
+    let r = new Float32Array(this.wasm.memory.buffer, outRealPtr, len * 2);
+    let i = new Float32Array(this.wasm.memory.buffer, outImagPtr, len * 2);
+    return [r, i];
+  }
+
+  reverseRealFftPre(
+    real: Float32Array,
+    imag: Float32Array,
+  ): [Float32Array, Float32Array] {
+    let len = this.wasm.getFftLength();
+    const realPtr = this.wasm.expnRealDataPtr();
+    const imagPtr = this.wasm.expnImagDataPtr();
+    new Float32Array(this.wasm.memory.buffer, realPtr, 2 * len).set(real);
+    new Float32Array(this.wasm.memory.buffer, imagPtr, 2 * len).set(imag);
+    this.wasm.collapseRealFft();
+    const outEvenPtr = this.wasm.realDataPtr();
+    const outOddPtr = this.wasm.imagDataPtr();
+    let e = new Float32Array(this.wasm.memory.buffer, outEvenPtr, len);
+    let o = new Float32Array(this.wasm.memory.buffer, outOddPtr, len);
+    return [e, o];
   }
 }
 
