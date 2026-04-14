@@ -14,7 +14,7 @@
 
 // Continuous spectrum analyzer.
 
-import { Float32RingBuffer } from "../dsp/buffers.js";
+import { Float32RingBuffer, IqPool } from "../dsp/buffers.js";
 import { makeBlackmanWindow } from "../dsp/coefficients.js";
 import { FFT } from "../dsp/fft.js";
 import { SampleBlock } from "../radio/sample_block.js";
@@ -31,7 +31,8 @@ export class Spectrum implements SampleReceiver {
     this.I = new Float32RingBuffer(131072);
     this.Q = new Float32RingBuffer(131072);
     this.fft = FFT.ofLength(fftSize);
-    this.fft.setWindow(makeBlackmanWindow(this.fft.length));
+    this.window = makeBlackmanWindow(this.fft.length);
+    this.copy = new IqPool(4, this.fft.length);
     this.lastOutput = new Float32Array(this.fft.length);
     this.dirty = true;
   }
@@ -40,12 +41,14 @@ export class Spectrum implements SampleReceiver {
   private Q: Float32RingBuffer;
   private lastFrequency: number | undefined;
   private fft: FFT;
+  private window: Float32Array;
+  private copy: IqPool;
   private lastOutput: Float32Array;
   private dirty: boolean;
 
   set size(newSize: number) {
     this.fft = FFT.ofLength(newSize);
-    this.fft.setWindow(makeBlackmanWindow(this.fft.length));
+    this.window = makeBlackmanWindow(this.fft.length);
     this.lastOutput = new Float32Array(this.fft.length);
     this.dirty = true;
   }
@@ -74,7 +77,14 @@ export class Spectrum implements SampleReceiver {
    */
   getSpectrum(spectrum: Float32Array) {
     if (this.dirty) {
-      let fft = this.fft.transformCircularBuffers(this.I, this.Q);
+      let [copyReal, copyImag] = this.copy.get(this.fft.length);
+      this.I.copyTo(copyReal);
+      this.Q.copyTo(copyImag);
+      for (let i = 0; i < this.fft.length; ++i) {
+        copyReal[i] *= this.window[i];
+        copyImag[i] *= this.window[i];
+      }
+      let fft = this.fft.transform(copyReal, copyImag);
       this.lastOutput.fill(-Infinity);
       for (let i = 0; i < this.lastOutput.length; ++i) {
         this.lastOutput[i] = 20 * Math.log10(Math.hypot(fft[0][i], fft[1][i]));

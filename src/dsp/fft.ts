@@ -54,22 +54,12 @@ export class FFT {
     this.revIndex = reversedBitIndices(length);
     this.wasmFft = getWasmFft();
     this.wasmFft.setCoefs(makeFftCoefficients(length));
-    this.copy = new IqPool(4, length);
     this.out = new IqPool(4, length);
-    this.window = new Float32Array(length);
-    this.window.fill(1);
   }
 
   private revIndex: Int32Array;
   private wasmFft: WasmFft;
-  private copy: IqPool;
   private out: IqPool;
-  private window: Float32Array;
-
-  /** Sets the window function for this FFT. */
-  setWindow(window: Float32Array) {
-    this.window.set(window);
-  }
 
   /**
    * Transforms the given time-domain input.
@@ -87,30 +77,19 @@ export class FFT {
     if (imag === undefined) {
       for (let i = 0; i < length && i < real.length; ++i) {
         const ri = this.revIndex[i];
-        outReal[ri] = (this.window[i] * real[i]) / length;
+        outReal[ri] = real[i] / length;
       }
     } else {
       for (let i = 0; i < length && i < real.length && i < imag.length; ++i) {
         const ri = this.revIndex[i];
-        outReal[ri] = (this.window[i] * real[i]) / length;
-        outImag[ri] = (this.window[i] * imag[i]) / length;
+        outReal[ri] = real[i] / length;
+        outImag[ri] = imag[i] / length;
       }
     }
     let res = this.wasmFft.fft(outReal, outImag, false);
     outReal.set(res[0]);
     outImag.set(res[1]);
     return [outReal, outImag];
-  }
-
-  transformCircularBuffers(
-    real: Float32RingBuffer,
-    imag: Float32RingBuffer,
-  ): FFTOutput {
-    const length = this.length;
-    let [copyReal, copyImag] = this.copy.get(length);
-    real.copyTo(copyReal);
-    imag.copyTo(copyImag);
-    return this.transform(copyReal, copyImag);
   }
 
   /**
@@ -172,6 +151,8 @@ export class RealFFT {
   transform(real: Float32Array): FFTOutput {
     const len = this.length;
     const hlen = len / 2;
+    this.copyEven.fill(0);
+    this.copyOdd.fill(0);
     for (let i = 0; i < hlen; ++i) {
       const ri = this.revIndex[i];
       this.copyEven[ri] = real[2 * i] / hlen;
@@ -201,7 +182,11 @@ export class RealFFT {
       this.copyEven[ri] = preEven[i];
       this.copyOdd[ri] = preOdd[i];
     }
-    const [outEven, outOdd] = this.wasmFft.fft(this.copyEven, this.copyOdd, true);
+    const [outEven, outOdd] = this.wasmFft.fft(
+      this.copyEven,
+      this.copyOdd,
+      true,
+    );
     const out = this.outReal.get(len);
     for (let i = 0; i < hlen; ++i) {
       out[2 * i] = outEven[i];

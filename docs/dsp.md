@@ -366,21 +366,15 @@ Use the `FFT.ofLength()` static method to generate an instance of the `FFT` clas
 
 The `FFT` class has the following methods:
 
-- `setWindow(window: Float32Array)` — sets the window function for this FFT. By default, a rectangular window (all ones) is used.
 - `transform(real: Float32Array, imag: Float32Array): FFTOutput` - computes the FFT for the complex samples provided by `real` and `imag`. Both arrays should be the same length as the FFT size, but it is not an error if not; the function will only consider samples up to the shortest of the arrays or the FFT size and pad the rest with zeroes.
-- `transformCircularBuffers(real: Float32RingBuffer, imag: Float32RingBuffer): FFTOutput` — computes the FFT for the latest samples stored in the `real` and `imag` circular buffers.
 - `reverse(real: Float32Array, imag: Float32Array): FFTOutput` — computes the reverse FFT for the complex samples provided by `real` and `imag`.
 
 The `FFTOutput` type is an array with two elements, both of type `Float32Array`. Each element of the first array contains the `I` component of a sample, and the corresponding element of the second array contains its `Q` component.
 
-The [`dsp/coefficients.ts`](../src/dsp/coefficients.ts) file contains an implementation of the Blackman window in the `makeBlackmanWindow()` method.
-
 ```typescript
 import { FFT } from "@jtarrio/signals/dsp/fft.js";
-import { makeBlackmanWindow } from "@jtarrio/signals/dsp/coefficients.js";
 
 let fft = FFT.ofLength(1024);
-fft.setWindow(makeBlackmanWindow(fft.length));
 let input: [Float32Array, Float32Array] = getSomeIqSamples();
 let output = fft.transform(input[0], input[1]);
 ```
