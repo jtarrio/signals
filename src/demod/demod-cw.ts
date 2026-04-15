@@ -57,7 +57,9 @@ export class DemodCW implements Demod<ModeCW> {
     this.audioTaps = options?.audioTaps || 351;
     const toneFrequency = options?.toneFrequency || 600;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
+    this.downsampler = getIqResampler(inRate, outRate, {
+      legacyTaps: downsamplerTaps,
+    });
     const kernel = makeLowPassKernel(
       outRate,
       mode.bandwidth / 2,

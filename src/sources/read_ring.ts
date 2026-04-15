@@ -36,7 +36,7 @@ export class PendingReadRing {
     if (this.size == this.pending.length) {
       throw new RadioError(
         "Too many simultaneous reads",
-        RadioErrorType.TransferError
+        RadioErrorType.TransferError,
       );
     }
     const { promise, resolve, reject } = Promise.withResolvers<SampleBlock>();
@@ -58,8 +58,8 @@ export class PendingReadRing {
       this.pending[this.readPtr].reject(
         new RadioError(
           "Transfer has been canceled",
-          RadioErrorType.TransferError
-        )
+          RadioErrorType.TransferError,
+        ),
       );
       this.readPtr = (this.readPtr + 1) % this.pending.length;
       this.size--;

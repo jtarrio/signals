@@ -56,7 +56,7 @@ export class BaseWasmFirFilter {
    * Loads a new block of samples to filter.
    * @param samples The samples to load.
    */
-  loadSamples(samples: Float32Array) {
+  protected loadSamples(samples: Float32Array) {
     const len = samples.length + this.offset;
     if (this.curSamples.length != len) {
       let newSamples = this.pool.get(len);

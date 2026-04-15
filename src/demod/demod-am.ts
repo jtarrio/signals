@@ -51,7 +51,9 @@ export class DemodAM implements Demod<ModeAM> {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
+    this.downsampler = getIqResampler(inRate, outRate, {
+      legacyTaps: downsamplerTaps,
+    });
     const kernel = makeLowPassKernel(
       outRate,
       this.mode.bandwidth / 2,

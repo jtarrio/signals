@@ -18,3 +18,7 @@ npm install @jtarrio/signals
 - Writing a [new signal source](new-source.md)
 - Writing a [new modulation scheme](new-demod.md)
 - Using the [built-in DSP library](dsp.md)
+
+## Migrating from old versions
+
+- [Version 0.9 to 0.10](migrate-09-to-010.md)

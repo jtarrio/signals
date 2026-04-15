@@ -72,7 +72,7 @@ export class AudioPlayer implements Player {
     buffer.copyToChannel(leftSamples as Float32Array<ArrayBuffer>, 0);
     buffer.copyToChannel(rightSamples as Float32Array<ArrayBuffer>, 1);
 
-    let source = new AudioBufferSourceNode(this.ac, {buffer: buffer});
+    let source = new AudioBufferSourceNode(this.ac, { buffer: buffer });
     source.connect(this.gainNode);
     source.onended = () => this.returnBuffer(buffer);
     source.start(this.lastPlayedAt);

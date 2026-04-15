@@ -14,7 +14,14 @@
 // limitations under the License.
 
 import { makeHilbertKernel } from "./coefficients.js";
-import { decay, DelayFilter, FFTFilter, Filter, FIRFilter, PilotDetector } from "./filters.js";
+import {
+  decay,
+  DelayFilter,
+  FFTFilter,
+  Filter,
+  FIRFilter,
+  PilotDetector,
+} from "./filters.js";
 import { Float32Pool } from "./buffers.js";
 import { atan2 } from "./math.js";
 
@@ -28,7 +35,7 @@ export enum Sideband {
 export type SSBDemodulatorOptions = {
   /** Filter via FFT instead of convolution. Uses less CPU, but generates more latency. */
   useFftFilter?: boolean;
-}
+};
 
 /** A class to demodulate a USB or LSB signal. */
 export class SSBDemodulator {
@@ -36,9 +43,15 @@ export class SSBDemodulator {
    * @param sideband The sideband to demodulate.
    * @param kernelLen The length of the Hilbert filter kernel to use.
    */
-  constructor(sideband: Sideband, kernelLen: number, options?: SSBDemodulatorOptions) {
+  constructor(
+    sideband: Sideband,
+    kernelLen: number,
+    options?: SSBDemodulatorOptions,
+  ) {
     let hilbert = makeHilbertKernel(kernelLen);
-    this.filterHilbert = options?.useFftFilter ? new FFTFilter(hilbert) : new FIRFilter(hilbert);
+    this.filterHilbert = options?.useFftFilter
+      ? new FFTFilter(hilbert)
+      : new FIRFilter(hilbert);
     this.filterDelay = new DelayFilter(this.filterHilbert.getDelay());
     this.hilbertMul = sideband == Sideband.Upper ? -1 : 1;
   }

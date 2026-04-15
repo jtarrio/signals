@@ -16,14 +16,14 @@ export class RadioError extends Error {
   constructor(
     message: string,
     type?: RadioErrorType,
-    options?: RadioErrorOptions
+    options?: RadioErrorOptions,
   );
   constructor(message: string, type?: RadioErrorType);
   constructor(message: string, options?: RadioErrorOptions);
   constructor(
     message: string,
     typeOrOptions?: RadioErrorType | RadioErrorOptions,
-    options?: RadioErrorOptions
+    options?: RadioErrorOptions,
   ) {
     super(
       message,
@@ -31,7 +31,7 @@ export class RadioError extends Error {
         ? options
         : typeof typeOrOptions === "object"
           ? typeOrOptions
-          : undefined
+          : undefined,
     );
     if (typeof typeOrOptions === "number") {
       this.type = typeOrOptions;

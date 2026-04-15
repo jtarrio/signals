@@ -74,7 +74,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   constructor(
     private sourceProvider: SignalSourceProvider,
     private sampleReceiver: SampleReceiver,
-    private options?: RadioOptions
+    private options?: RadioOptions,
   ) {
     super();
     this.sampleRate = 1024000;
@@ -120,7 +120,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
           this.sampleReceiver,
           this,
           this.sampleRate,
-          this.options
+          this.options,
         );
         this.transfers.startStream();
         this.state = State.PLAYING;
@@ -206,7 +206,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
         try {
           this.parameterValues.set(
             parameter,
-            await this.source!.setParameter(parameter, value)
+            await this.source!.setParameter(parameter, value),
           );
         } catch (e) {
           this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
@@ -226,22 +226,22 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   addEventListener(
     type: "radio",
     callback: (e: RadioEvent) => void | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: EventListenerOrEventListenerObject | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: any,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void {
     super.addEventListener(
       type,
       callback as EventListenerOrEventListenerObject | null,
-      options
+      options,
     );
   }
 }
@@ -262,7 +262,7 @@ class Transfers {
     private sampleReceiver: SampleReceiver,
     private radio: Radio<any>,
     private sampleRate: number,
-    options?: RadioOptions
+    options?: RadioOptions,
   ) {
     let buffersPerSecond = options?.buffersPerSecond;
     if (buffersPerSecond === undefined || buffersPerSecond <= 0)
@@ -316,7 +316,7 @@ class Transfers {
       let error = new RadioError(
         "Sample transfer was interrupted. Did you unplug your device?",
         RadioErrorType.TransferError,
-        { cause: e }
+        { cause: e },
       );
       let event = new RadioEvent({ type: "error", exception: error });
       this.radio.dispatchEvent(event);

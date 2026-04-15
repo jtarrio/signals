@@ -26,7 +26,7 @@ export function makeLowPassKernel(
   sampleRate: number,
   cornerFreq: number,
   length: number,
-  gain?: number
+  gain?: number,
 ): Float32Array {
   if (gain === undefined) gain = 1;
   length += (length + 1) % 2;

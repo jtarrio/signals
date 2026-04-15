@@ -27,11 +27,13 @@ export type SampleGenerator = (
   sampleRate: number,
   centerFrequency: number,
   I: Float32Array,
-  Q: Float32Array
+  Q: Float32Array,
 ) => void;
 
 /** A SignalSource that gets samples from a SampleGenerator function in real time. */
-export class GeneratedSource<ParameterKey extends string = string>  extends RealTimeSource<ParameterKey> {
+export class GeneratedSource<
+  ParameterKey extends string = string,
+> extends RealTimeSource<ParameterKey> {
   constructor(private generator: SampleGenerator) {
     super();
   }
@@ -39,7 +41,7 @@ export class GeneratedSource<ParameterKey extends string = string>  extends Real
   protected getSamples(
     firstSample: number,
     I: Float32Array,
-    Q: Float32Array
+    Q: Float32Array,
   ): void {
     this.generator(firstSample, this.sampleRate, this.centerFrequency, I, Q);
   }

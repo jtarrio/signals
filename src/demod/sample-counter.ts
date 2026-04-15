@@ -57,22 +57,22 @@ export class SampleCounter extends EventTarget implements SampleReceiver {
   addEventListener(
     type: "sample-click",
     callback: (e: SampleClickEvent) => void | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: EventListenerOrEventListenerObject | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: any,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void {
     super.addEventListener(
       type,
       callback as EventListenerOrEventListenerObject | null,
-      options
+      options,
     );
   }
 }

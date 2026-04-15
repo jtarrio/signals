@@ -123,7 +123,7 @@ export class Demodulator extends EventTarget implements SampleReceiver {
       this.inRate,
       this.player.sampleRate,
       mode,
-      this.modeOptions[mode.scheme]
+      this.modeOptions[mode.scheme],
     );
   }
 
@@ -143,7 +143,7 @@ export class Demodulator extends EventTarget implements SampleReceiver {
     let { left, right, stereo, snr } = this.demod.demodulate(
       block.I,
       block.Q,
-      this.frequencyOffset
+      this.frequencyOffset,
     );
     this.squelchControl.applySquelch(this.mode, left, right, snr);
     this.player.play(left, right);
@@ -156,22 +156,22 @@ export class Demodulator extends EventTarget implements SampleReceiver {
   addEventListener(
     type: "stereo-status",
     callback: (e: StereoStatusEvent) => void | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: EventListenerOrEventListenerObject | null,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void;
   addEventListener(
     type: string,
     callback: any,
-    options?: boolean | AddEventListenerOptions | undefined
+    options?: boolean | AddEventListenerOptions | undefined,
   ): void {
     super.addEventListener(
       type,
       callback as EventListenerOrEventListenerObject | null,
-      options
+      options,
     );
   }
 }
@@ -196,7 +196,7 @@ class SquelchControl {
     mode: Mode,
     left: Float32Array,
     right: Float32Array,
-    snr: number
+    snr: number,
   ) {
     const SQUELCH_TAIL = 0.1;
     let params = modeParameters(mode);

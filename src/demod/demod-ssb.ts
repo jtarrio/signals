@@ -57,7 +57,9 @@ export class DemodSSB implements Demod<ModeSSB> {
     this.rfTaps = options?.rfTaps || 151;
     const hilbertTaps = options?.hilbertTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
+    this.downsampler = getIqResampler(inRate, outRate, {
+      legacyTaps: downsamplerTaps,
+    });
     const kernel = makeLowPassKernel(
       this.outRate,
       mode.bandwidth / 2,

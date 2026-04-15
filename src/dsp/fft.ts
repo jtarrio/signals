@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { getWasmFft, WasmFft } from "../wasm/fft.js";
-import { Float32Pool, Float32RingBuffer, IqPool } from "./buffers.js";
+import { Float32Pool, IqPool } from "./buffers.js";
 
 /** Fast Fourier Transform implementation. */
 

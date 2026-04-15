@@ -18,9 +18,6 @@ import { makeLowPassKernel } from "../dsp/coefficients.js";
 import { FMDemodulator, StereoSeparator } from "../dsp/demodulators.js";
 import {
   Deemphasis,
-  FFTFilter,
-  Filter,
-  FIRFilter,
   FrequencyShifter,
   IqFFTFilter,
   IqFilter,

@@ -51,7 +51,9 @@ export class DemodNBFM implements Demod<ModeNBFM> {
     const downsamplerTaps = options?.downsamplerTaps || 151;
     this.rfTaps = options?.rfTaps || 151;
     this.shifter = new FrequencyShifter(inRate);
-    this.downsampler = getIqResampler(inRate, outRate, { legacyTaps: downsamplerTaps });
+    this.downsampler = getIqResampler(inRate, outRate, {
+      legacyTaps: downsamplerTaps,
+    });
     const kernel = makeLowPassKernel(outRate, mode.maxF, this.rfTaps);
     this.filter = options?.useFftFilter
       ? new IqFFTFilter(kernel)

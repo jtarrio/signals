@@ -123,7 +123,7 @@ rb.copyTo(latestI, latestQ);
 
 The [`dsp/coefficients.ts`](../src/dsp/coefficients.ts) file contains a `makeLowPassKernel()` function that returns a low-pass filter kernel with a Hamming window.
 
-The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `FIRFilter` class that lets you apply an arbitrary filter kernel via convolution. You can use it to filter a `Float32Array` in place or to extract individual filtered samples.
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file contains a `FIRFilter` class that lets you apply an arbitrary filter kernel via convolution.
 
 ```typescript
 import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
@@ -135,20 +135,11 @@ const kernelSize = 151;
 let lowpassKernel = makeLowPassKernel(sampleRate, cornerFreq, kernelSize);
 let lowpass = new FIRFilter(lowpassKernel);
 
-// Filter an array in place
-let samples1: Float32Array = getSomeSamples();
-lowpass.inPlace(samples1);
-
-// Get filtered samples to implement a downsampler
-let samples2: Float32Array = getSomeSamples();
-lowpass.loadSamples(samples2); // Loads the content of `samples2` in the filter
-let output = new Float32Array(samples2.length / 2);
-for (let i = 0; i < output.length; i++) {
-  output[i] = lowpass.get(i * 2);
-}
+let samples: Float32Array = getSomeSamples();
+lowpass.inPlace(samples);
 ```
 
-There is also an `IqFIRFilter` class that lets you apply an arbitrary filter kernel to a complex signal via convolution. You can only use it to filter in place.
+There is also an `IqFIRFilter` class that lets you apply an arbitrary filter kernel to a complex signal via convolution.
 
 ```typescript
 import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
@@ -166,7 +157,7 @@ lowpass.inPlace(I, Q);
 
 ### FFT filters
 
-The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains two classes that implement FIR filters via short-term Fourier transforms (STFT). Those classes are `FFTFilter` (used for real signals) and `IqFFTFilter` (used for complex signals.) They only offer in-place filtering:
+The [`dsp/filters.ts`](../src/dsp/filters.ts) file also contains two classes that implement FIR filters via short-term Fourier transforms (STFT). Those classes are `FFTFilter` (used for real signals) and `IqFFTFilter` (used for complex signals.)
 
 ```typescript
 import { makeLowPassKernel } from "@jtarrio/signals/dsp/coefficients.js";
@@ -227,7 +218,6 @@ const sampleRate = 1024000;
 const tc = 50e-6; // 50 microseconds
 let deemph = new Deemphasis(sampleRate, tc);
 
-// Filter in place
 let samples: Float32Array = getSomeSamples();
 deemph.inplace(samples);
 ```

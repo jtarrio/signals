@@ -77,7 +77,7 @@ export type Mode = { scheme: string };
 export function registerDemod<M extends Mode>(
   name: M["scheme"],
   demod: DemodConstructor<M>,
-  config: ConfigConstructor<M>
+  config: ConfigConstructor<M>,
 ) {
   registeredDemods.set(name, { demod: demod, config: config });
 }
@@ -109,7 +109,7 @@ export function getDemod<M extends Mode>(
   inRate: number,
   outRate: number,
   mode: M,
-  options?: object
+  options?: object,
 ): Demod<M> {
   let reg = getRegisteredDemod(mode);
   return new reg.demod(inRate, outRate, mode, options);
@@ -183,12 +183,12 @@ export type DemodConstructor<M extends Mode> = new (
   inRate: number,
   outRate: number,
   mode: M,
-  options?: object
+  options?: object,
 ) => Demod<M>;
 
 /** The type for a constructor of a Configurator object. */
 export type ConfigConstructor<M extends Mode> = new (
-  base: M | string
+  base: M | string,
 ) => Configurator<M>;
 
 type RegisteredDemod = {

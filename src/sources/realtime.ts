@@ -24,7 +24,9 @@ import { PendingReadRing } from "./read_ring.js";
  * Then, at periodic intervals, it checks if there are any pending reads and resolves
  * them with the contents of the buffer, refilling it as needed.
  */
-export class RealTimeSource<ParameterKey extends string = string> implements SignalSource<ParameterKey> {
+export class RealTimeSource<
+  ParameterKey extends string = string,
+> implements SignalSource<ParameterKey> {
   constructor() {
     this.sampleRate = 1024000;
     this.centerFrequency = 0;
@@ -42,7 +44,7 @@ export class RealTimeSource<ParameterKey extends string = string> implements Sig
   protected sampleRate: number;
   /** The source's center frequency. */
   protected centerFrequency: number;
-  
+
   private I: Float32RingBuffer;
   private Q: Float32RingBuffer;
   private lastSampleInBuffer: number;
@@ -59,7 +61,10 @@ export class RealTimeSource<ParameterKey extends string = string> implements Sig
     Q.fill(0);
   }
 
-  async setParameter<V>(_property: ParameterKey, _value: V): Promise<void | V> {}
+  async setParameter<V>(
+    _property: ParameterKey,
+    _value: V,
+  ): Promise<void | V> {}
 
   async setSampleRate(sampleRate: number) {
     this.sampleRate = sampleRate;
@@ -101,7 +106,7 @@ export class RealTimeSource<ParameterKey extends string = string> implements Sig
     if (this.firstTs === null) this.firstTs = ts;
 
     const curSample = Math.floor(
-      ((ts - this.firstTs) * this.sampleRate) / 1000
+      ((ts - this.firstTs) * this.sampleRate) / 1000,
     );
 
     // We always try to fill the buffer when there are no pending reads.

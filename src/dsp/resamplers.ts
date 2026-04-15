@@ -14,10 +14,9 @@
 // limitations under the License.
 
 import { RadioError, RadioErrorType } from "../errors.js";
-import { Convolver, getConvolver } from "../wasm/convolver.js";
 import { Float32Pool } from "./buffers.js";
 import { makeLowPassKernel } from "./coefficients.js";
-import { BaseWasmFirFilter, FIRFilter } from "./filters.js";
+import { BaseWasmFirFilter } from "./filters.js";
 
 /** Interface for classes that convert real signals between sample rates. */
 export interface RealResampler {
@@ -33,7 +32,7 @@ export interface IqResampler {
   clone(): IqResampler;
 }
 
-class PureRealDownsampler implements RealResampler {
+class Downsampler implements RealResampler {
   constructor(
     private ratio: number,
     kernel: Float32Array,
@@ -68,14 +67,14 @@ class PureRealDownsampler implements RealResampler {
     return this.filter.getDelay() / this.ratio;
   }
 
-  clone(): PureRealDownsampler {
-    let out = new PureRealDownsampler(this.ratio, new Float32Array(1));
+  clone(): Downsampler {
+    let out = new Downsampler(this.ratio, new Float32Array(1));
     out.filter = this.filter.clone();
     return out;
   }
 }
 
-class PureRealUpsampler implements RealResampler {
+class Upsampler implements RealResampler {
   constructor(
     private ratio: number,
     kernel: Float32Array,
@@ -104,14 +103,14 @@ class PureRealUpsampler implements RealResampler {
     return this.filter.getDelay();
   }
 
-  clone(): PureRealUpsampler {
-    let out = new PureRealUpsampler(this.ratio, new Float32Array(this.ratio));
+  clone(): Upsampler {
+    let out = new Upsampler(this.ratio, new Float32Array(this.ratio));
     out.filter = this.filter.clone();
     return out;
   }
 }
 
-class RealUpDownsampler implements RealResampler {
+class Resampler implements RealResampler {
   constructor(
     private upRatio: number,
     private downRatio: number,
@@ -155,8 +154,8 @@ class RealUpDownsampler implements RealResampler {
     return this.filter.getDelay() / this.downRatio;
   }
 
-  clone(): RealUpDownsampler {
-    let out = new RealUpDownsampler(
+  clone(): Resampler {
+    let out = new Resampler(
       this.upRatio,
       this.downRatio,
       new Float32Array(this.upRatio),
@@ -215,6 +214,7 @@ export type ResamplerOptions = {
    * The number of taps that you would have used in RealResampler/ComplexResampler to obtain
    * a similar frequency response.
    * Overrides outputTaps if specified.
+   * @deprecated Will be removed in the next major version.
    */
   legacyTaps?: number;
 };
@@ -235,7 +235,7 @@ export function getRealResampler(
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(inRate, corner, taps, gain);
-    return new PureRealDownsampler(inRate / outRate, kernel);
+    return new Downsampler(inRate / outRate, kernel);
   }
   if (inRate < outRate && outRate % inRate == 0) {
     // Pure upsampler
@@ -247,7 +247,7 @@ export function getRealResampler(
     let gain = options?.gain;
     let kernel =
       options?.kernel || makeLowPassKernel(outRate, corner, taps, gain);
-    return new PureRealUpsampler(upFactor, kernel);
+    return new Upsampler(upFactor, kernel);
   }
   // Resampler
   let gcd = greatestCommonDivisor(inRate, outRate);
@@ -261,7 +261,7 @@ export function getRealResampler(
   let gain = options?.gain;
   let kernel =
     options?.kernel || makeLowPassKernel(interRate, corner, taps, gain);
-  return new RealUpDownsampler(upFactor, downFactor, kernel);
+  return new Resampler(upFactor, downFactor, kernel);
 }
 
 /** Returns an IqResampler that converts signals from the input rate to the output rate. */
