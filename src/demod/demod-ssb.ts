@@ -60,11 +60,7 @@ export class DemodSSB implements Demod<ModeSSB> {
     this.downsampler = getIqResampler(inRate, outRate, {
       legacyTaps: downsamplerTaps,
     });
-    const kernel = makeLowPassKernel(
-      this.outRate,
-      mode.bandwidth / 2,
-      this.rfTaps,
-    );
+    const kernel = makeLowPassKernel(this.outRate, mode.bandwidth, this.rfTaps);
     this.filter = options?.useFftFilter
       ? new FFTFilter(kernel)
       : new FIRFilter(kernel);
@@ -91,11 +87,7 @@ export class DemodSSB implements Demod<ModeSSB> {
 
   setMode(mode: ModeSSB) {
     this.mode = mode;
-    const kernel = makeLowPassKernel(
-      this.outRate,
-      mode.bandwidth / 2,
-      this.rfTaps,
-    );
+    const kernel = makeLowPassKernel(this.outRate, mode.bandwidth, this.rfTaps);
     this.filter.setCoefficients(kernel);
     this.demodulator.setSideband(
       mode.scheme == "USB" ? Sideband.Upper : Sideband.Lower,
@@ -119,8 +111,7 @@ export class DemodSSB implements Demod<ModeSSB> {
     let allPower = getPower(I, Q);
     this.demodulator.demodulate(I, Q, I);
     this.filter.inPlace(I);
-    let signalPower =
-      (getPower(I, I) * this.outRate) / (this.mode.bandwidth * 2);
+    let signalPower = (getPower(I, I) * this.outRate) / this.mode.bandwidth;
     this.agc.inPlace(I);
     let right = this.outPool.get(I.length);
     right.set(I);

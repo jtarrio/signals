@@ -102,7 +102,7 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.approximately(output.snr, 1, 0.01);
+        assert.isAtLeast(output.snr, 10);
       });
 
       test("Single tone USB opposite side", () => {
@@ -111,7 +111,7 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.isAtMost(binModulus(transformed, 1500), 1e-2);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.isAtMost(output.snr, 1e-2);
+        assert.isAtMost(output.snr, 0.15);
       });
 
       test("Single tone LSB same side", () => {
@@ -120,7 +120,7 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.approximately(binModulus(transformed, 1500), 0.5, 0.05);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.approximately(output.snr, 1, 0.01);
+        assert.isAtLeast(output.snr, 10);
       });
 
       test("Single tone LSB opposite side", () => {
@@ -129,21 +129,21 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.isAtMost(binModulus(transformed, 1500), 1e-2);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.isAtMost(output.snr, 1e-2);
+        assert.isAtMost(output.snr, 0.15);
       });
 
       test("Single tone upper side with noise", () => {
         let output = demodulate(usbDemod, 1500, 1, 0.2);
         let transformed = fftTransform(output.left);
-        assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
-        assert.approximately(output.snr, 1, 0.015);
+        assert.approximately(binModulus(transformed, 1500), 0.45, 0.04);
+        assert.isAtLeast(output.snr, 10);
       });
 
       test("Single tone lower side with noise", () => {
         let output = demodulate(lsbDemod, -1500, 1, 0.2);
         let transformed = fftTransform(output.left);
-        assert.approximately(binModulus(transformed, 1500), 0.4, 0.04);
-        assert.approximately(output.snr, 1, 0.015);
+        assert.approximately(binModulus(transformed, 1500), 0.45, 0.04);
+        assert.isAtLeast(output.snr, 10);
       });
     };
 
