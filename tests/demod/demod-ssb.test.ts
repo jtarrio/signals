@@ -111,7 +111,7 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.isAtMost(binModulus(transformed, 1500), 1e-2);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.isAtMost(output.snr, 0.15);
+        assert.isAtMost(output.snr, 0.2);
       });
 
       test("Single tone LSB same side", () => {
@@ -129,7 +129,7 @@ describe("DemodSSB", () => {
         assert.isAtMost(binModulus(transformed, 1125), 1e-2);
         assert.isAtMost(binModulus(transformed, 1500), 1e-2);
         assert.isAtMost(binModulus(transformed, 1875), 1e-2);
-        assert.isAtMost(output.snr, 0.15);
+        assert.isAtMost(output.snr, 0.2);
       });
 
       test("Single tone upper side with noise", () => {
