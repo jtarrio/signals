@@ -122,7 +122,7 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
           this.sampleRate,
           this.options,
         );
-        this.transfers.startStream();
+        await this.transfers.startStream();
         this.state = State.PLAYING;
         this.dispatchEvent(new RadioEvent({ type: "started" }));
       } catch (e) {
@@ -185,7 +185,27 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
    * @returns a promise that resolves after the command has been processed by the radio.
    */
   async setSampleRate(sampleRate: number) {
-    this.sampleRate = sampleRate;
+    return this.singleThread.run(async () => {
+      if (this.sampleRate === sampleRate) return;
+      if (this.state == State.OFF) {
+        this.sampleRate = sampleRate;
+        return;
+      }
+      try {
+        await this.transfers!.stopStream();
+        this.sampleRate = await this.source!.setSampleRate(sampleRate);
+        this.transfers = new Transfers(
+          this.source!,
+          this.sampleReceiver,
+          this,
+          this.sampleRate,
+          this.options,
+        );
+        await this.transfers.startStream();
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      }
+    });
   }
 
   /** Returns the current sample rate. */
@@ -202,15 +222,15 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
     return this.singleThread.run(async () => {
       if (this.state == State.OFF) {
         this.parameterValues.set(parameter, value);
-      } else {
-        try {
-          this.parameterValues.set(
-            parameter,
-            await this.source!.setParameter(parameter, value),
-          );
-        } catch (e) {
-          this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
-        }
+        return;
+      }
+      try {
+        this.parameterValues.set(
+          parameter,
+          await this.source!.setParameter(parameter, value),
+        );
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
       }
     });
   }
@@ -218,6 +238,32 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
   /** Returns the value of a parameter. */
   getParameter(parameter: ParameterKey): any {
     return this.parameterValues.get(parameter);
+  }
+
+  /** Changes the radio's options. */
+  async setOptions(options: RadioOptions) {
+    return this.singleThread.run(async () => {
+      this.options = options;
+      if (this.state == State.OFF) return;
+      try {
+        await this.transfers!.stopStream();
+        this.transfers = new Transfers(
+          this.source!,
+          this.sampleReceiver,
+          this,
+          this.sampleRate,
+          this.options,
+        );
+        await this.transfers.startStream();
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      }
+    });
+  }
+
+  /** Returns the radio's options. */
+  getOptions(): RadioOptions {
+    return this.options || {};
   }
 
   /** Override this function to do something when a sample block is received. */
@@ -283,7 +329,6 @@ class Transfers {
   /** Starts the transfers as a stream. */
   async startStream() {
     this.sampleReceiver.setSampleRate(this.sampleRate);
-    await this.source.startReceiving();
     this.buffersWanted = Transfers.PARALLEL_BUFFERS;
     while (this.buffersRunning < this.buffersWanted) {
       ++this.buffersRunning;
