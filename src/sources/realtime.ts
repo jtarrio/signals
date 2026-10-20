@@ -96,7 +96,7 @@ export class RealTimeSource<
 
   /** Schedules the next frame. */
   private schedule() {
-    requestAnimationFrame((ts) => this.frame(ts));
+    setTimeout(() => this.frame(performance.now()), 16);
   }
 
   /** Fills the buffer and resolves promises for samples that become available in this frame. */
