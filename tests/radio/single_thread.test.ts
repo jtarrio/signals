@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { test, assert } from "vitest";
+import { test, assert, expect } from "vitest";
 import { SingleThread } from "../../src/radio/single_thread.js";
 
 test("Execute", async () => {
@@ -75,6 +75,35 @@ test("Return values", async () => {
   assert.equal(await p1, 1);
   assert.equal(await p2, 2);
   assert.equal(await p3, 3);
+});
+
+test("Continue after error", async () => {
+  let st = new SingleThread();
+  let p1 = st.run(async () => {
+    await wait();
+    throw new Error("async fail");
+  });
+  let p2 = st.run(async () => 42);
+
+  await expect(p1).rejects.toThrow("async fail");
+  assert.equal(await p2, 42);
+});
+
+test("Continue after synchronous throw", async () => {
+  let st = new SingleThread();
+  let p1 = st.run(() => {
+    throw new Error("sync fail");
+  });
+  let p2 = st.run(() => 99);
+
+  await expect(p1).rejects.toThrow("sync fail");
+  assert.equal(await p2, 99);
+});
+
+test("Support synchronous functions", async () => {
+  let st = new SingleThread();
+  let result = await st.run(() => 123);
+  assert.equal(result, 123);
 });
 
 function wait(): Promise<void> {

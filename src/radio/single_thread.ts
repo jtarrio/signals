@@ -22,17 +22,21 @@ export class SingleThread {
     this.promise = Promise.resolve();
   }
 
-  private promise: Promise<any>;
+  private promise: Promise<void>;
 
   /**
-   * Executes the provided async function.
+   * Executes the provided function.
    *
    * Functions passed to `run()` are executed in strict sequence: each function only starts after the previous one ends.
    *
-   * Make sure your function doesn't throw, because then the behavior is undefined.
+   * If a function rejects or throws, the error is returned to the caller and subsequent functions still execute.
    */
-  async run<T>(fn: () => Promise<T>) {
-    this.promise = this.promise.then(() => fn());
-    return this.promise;
+  run<T>(fn: () => Promise<T> | T): Promise<T> {
+    let newPromise = this.promise.then(() => fn());
+    this.promise = newPromise.then(
+      () => {},
+      () => {},
+    );
+    return newPromise;
   }
 }
