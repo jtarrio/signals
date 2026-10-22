@@ -109,11 +109,11 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
       if (this.state != State.OFF) return;
       try {
         this.source = await this.sourceProvider.get();
-        this.sampleRate = await this.source.setSampleRate(this.sampleRate);
-        this.frequency = await this.source.setCenterFrequency(this.frequency);
         for (let [name, value] of this.parameterValues.entries()) {
           await this.source.setParameter(name, value);
         }
+        this.sampleRate = await this.source.setSampleRate(this.sampleRate);
+        this.frequency = await this.source.setCenterFrequency(this.frequency);
         await this.source.startReceiving();
         this.transfers = new Transfers(
           this.source,
@@ -142,11 +142,11 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
       try {
         await this.transfers!.stopStream();
         await this.source!.close();
-        this.state = State.OFF;
-        this.dispatchEvent(new RadioEvent({ type: "stopped" }));
       } catch (e) {
         this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
       }
+      this.state = State.OFF;
+      this.dispatchEvent(new RadioEvent({ type: "stopped" }));
     });
   }
 
@@ -365,6 +365,8 @@ class Transfers {
       );
       let event = new RadioEvent({ type: "error", exception: error });
       this.radio.dispatchEvent(event);
+      this.stopCallback = () => this.radio.stop();
+      this.buffersWanted = 0;
     }
     --this.buffersRunning;
     if (this.buffersRunning == 0) {
