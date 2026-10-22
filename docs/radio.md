@@ -75,8 +75,8 @@ setTimeout(() => radio.stop(), 5000);
 
 The [`Radio`](../src/radio/radio.ts) class can dispatch `radio` events. Those events have a `detail` property that contains an object with a property named `type`, which can have one of the following values:
 
-- `starting`: dispatched when the radio starts playing;
-- `stopping`: dispatched when the radio stops playing;
+- `started`: dispatched when the radio starts playing;
+- `stopped`: dispatched when the radio stops playing;
 - `error`: dispatched when the radio fails because of an error. The `exception` property contains the exception that caused the error, if any.
 
 ```typescript
@@ -108,7 +108,7 @@ You can change the sample rate with the `setSampleRate()` method.
 await radio.setSampleRate(1024000);
 ```
 
-If the radio is playing when you call `setSampleRate()`, this change won't take effect until you stop and restart the radio.
+You can call this method while the radio is playing or stopped. If the radio is playing, the stream will be restarted with the new sample rate.
 
 You can get the current sample rate with the `getSampleRate()` method.
 
@@ -148,6 +148,20 @@ You can get the value of a parameter (that you set previously) with the `getPara
 
 ```typescript
 console.log("Gain:", radio.getParameter("gain"));
+```
+
+#### Options
+
+You can change the radio options with the `setOptions()` method. If the radio is playing when you call this method, the stream will be restarted with the new options.
+
+```typescript
+await radio.setOptions({ buffersPerSecond: 30 });
+```
+
+You can get the current options with the `getOptions()` method.
+
+```typescript
+console.log("Current options:", radio.getOptions());
 ```
 
 ## The `SignalSource` interface

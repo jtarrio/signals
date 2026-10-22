@@ -15,8 +15,8 @@ Implementations of [`SignalSource`](../src/radio/signal_source.ts) must have the
 
 The [`SignalSource`](../src/radio/signal_source.ts) interface contains the following methods:
 
-- `setSampleRate(sampleRate: number): Promise<number>` --- sets the wanted sample rate for the source and returns the actual sample rate, which may be different. This function will always be called before `startReceiving()`.
-- `setCenterFrequency(freq: number): Promise<number>` --- sets the center frequency that the source is tuned into and returns the actual center frequency, which may be different.
+- `setSampleRate(sampleRate: number): Promise<number>` --- sets the wanted sample rate for the source and returns the requested sample rate. This function will always be called before `startReceiving()`.
+- `setCenterFrequency(freq: number): Promise<number>` --- sets the center frequency that the source is tuned into and returns the requested center frequency.
 - `setParameter<V>(name: string, value: any): Promise<V>` --- sets the value of a parameter, returning the actual value or undefined if the parameter is not settable.
 - `startReceiving(): Promise<void>` --- prepares the source to start streaming samples. This function must be called before the first call to `readSamples()`.
 - `readSamples(length: number): Promise<SampleBlock>` --- requests a block with the given number of samples, and returns the block when ready. There may be several reads in flight, and they will be resolved in the same order that they were issued.

@@ -18,13 +18,13 @@ import { SampleBlock } from "./sample_block.js";
 export interface SignalSource<ParameterKey extends string = string> {
   /**
    * Sets the wanted sample rate for the source.
-   * Returns the actual sample rate, which may differ.
+   * Returns the requested sample rate.
    * This function should be called before start.
    */
   setSampleRate(sampleRate: number): Promise<number>;
   /**
    * Sets the center frequency the source listens on.
-   * Returns the actual center frequency, which may differ.
+   * Returns the requested center frequency.
    */
   setCenterFrequency(freq: number): Promise<number>;
   /**
