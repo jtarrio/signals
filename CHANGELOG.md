@@ -6,6 +6,7 @@
 * `Radio`: Automatically stop the radio and emit a `stopped` event when a sample transfer error occurs.
 * Single thread executor: functions can now throw exceptions.
 * `RealTimeSource`: use `setTimeout` instead of `requestAnimationFrame` to schedule new samples.
+* Thanks to [diddy](https://github.com/diddy-boy) for the notes!
 
 ## 0.10.1
 
