@@ -1,9 +1,9 @@
 # Change log
 
-## Still unreleased
+## 0.10.2
 
-* `Radio`: Added the ability to change the sample rate while the radio is playing.
-* `Radio`: Added a function to change the options while the radio is playing.
+* `Radio`: Added the ability to change the sample rate and the options while the radio is playing.
+* `Radio`: Automatically stop the radio and emit a `stopped` event when a sample transfer error occurs.
 * Single thread executor: functions can now throw exceptions.
 * `RealTimeSource`: use `setTimeout` instead of `requestAnimationFrame` to schedule new samples.
 
