@@ -127,6 +127,15 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
         this.dispatchEvent(new RadioEvent({ type: "started" }));
       } catch (e) {
         this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+        try {
+          await this.transfers?.stopStream();
+        } catch (_) {}
+        try {
+          await this.source?.close();
+        } catch (_) {}
+        this.transfers = undefined;
+        this.source = undefined;
+        this.state = State.OFF;
       }
     });
   }
@@ -141,6 +150,10 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
       if (this.state != State.PLAYING) return;
       try {
         await this.transfers!.stopStream();
+      } catch (e) {
+        this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
+      }
+      try {
         await this.source!.close();
       } catch (e) {
         this.dispatchEvent(new RadioEvent({ type: "error", exception: e }));
@@ -148,6 +161,13 @@ export class Radio<ParameterKey extends string = string> extends EventTarget {
       this.state = State.OFF;
       this.dispatchEvent(new RadioEvent({ type: "stopped" }));
     });
+  }
+
+  /**
+   * Returns a promise that resolves after all previous commands have been processed by the radio.
+   */
+  ready() {
+    return this.singleThread.run(() => {});
   }
 
   /** Returns whether the radio is playing (or scanning). */
@@ -358,15 +378,21 @@ class Transfers {
         this.sampleReceiver.receiveSamples(b);
       }
     } catch (e) {
-      let error = new RadioError(
-        "Sample transfer was interrupted. Did you unplug your device?",
-        RadioErrorType.TransferError,
-        { cause: e },
-      );
-      let event = new RadioEvent({ type: "error", exception: error });
-      this.radio.dispatchEvent(event);
-      this.stopCallback = () => this.radio.stop();
-      this.buffersWanted = 0;
+      if (this.buffersWanted > 0) {
+        let error = new RadioError(
+          "Sample transfer was interrupted. Did you unplug your device?",
+          RadioErrorType.TransferError,
+          { cause: e },
+        );
+        let event = new RadioEvent({ type: "error", exception: error });
+        this.radio.dispatchEvent(event);
+        let prevCallback = this.stopCallback;
+        this.stopCallback = () => {
+          this.radio.stop();
+          prevCallback();
+        };
+        this.buffersWanted = 0;
+      }
     }
     --this.buffersRunning;
     if (this.buffersRunning == 0) {
