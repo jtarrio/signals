@@ -67,9 +67,13 @@ export class RealTimeSource<
   ): Promise<void | V> {}
 
   async setSampleRate(sampleRate: number) {
+    let oldSampleRate = this.sampleRate;
     this.sampleRate = sampleRate;
     this.I = new Float32RingBuffer(Math.max(65536, this.sampleRate / 10));
     this.Q = new Float32RingBuffer(this.I.capacity);
+    this.lastSampleInBuffer = Math.floor(
+      (sampleRate * this.lastSampleInBuffer) / oldSampleRate,
+    );
     return this.sampleRate;
   }
 
