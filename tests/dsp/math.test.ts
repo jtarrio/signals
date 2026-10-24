@@ -17,13 +17,18 @@ import { atan2 } from "../../src/dsp/math.js";
 
 test("atan2", () => {
   for (let i = 0; i < 10000; ++i) {
-    let angle = (2 * Math.PI * i) / 10000;
-    let I = Math.cos(angle);
-    let Q = Math.sin(angle);
-    let expected = Math.atan2(Q, I);
-    // We are comparing to Math.atan2 and not to the original angle
-    // because sin/cos will bring their own errors into play,
-    // and our benchmark is atan2 anyway.
-    assert.approximately(atan2(Q, I), expected, 4e-8, `For angle ${angle}`);
+    for (let sgnI = -1; sgnI <= 1; sgnI += 2) {
+      for (let sgnQ = -1; sgnQ <= 1; sgnQ += 2) {
+        let angle = (Math.PI / 2 * i) / 10000;
+        let I = sgnI * Math.cos(angle);
+        let Q = sgnQ * Math.sin(angle);
+        let expected = Math.atan2(Q, I);
+        // We are comparing to Math.atan2 and not to the original angle
+        // because sin/cos will bring their own errors into play,
+        // and our benchmark is atan2 anyway.
+        let actualAngle = sgnQ * (sgnI * angle + Math.PI * (1 - sgnI) / 2);
+        assert.approximately(atan2(Q, I), expected, 4e-8, `For angle ${actualAngle}`);
+      }
+    }
   }
 });

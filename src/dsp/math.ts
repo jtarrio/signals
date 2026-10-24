@@ -42,13 +42,13 @@ export function atan2(imag: number, real: number): number {
                           divSq * (0.0218612288 + divSq * -0.004054058)))))));
 
   if (swap) {
-    if (div >= 0) {
+    if (div > 0 || (real == 0 && imag > 0)) {
       res = Math.PI / 2 - res;
     } else {
       res = -Math.PI / 2 - res;
     }
   }
   if (real >= 0) return res;
-  if (imag >= 0) return res + Math.PI;
+  if (imag > 0 || Object.is(imag, +0)) return res + Math.PI;
   return res - Math.PI;
 }
