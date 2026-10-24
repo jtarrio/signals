@@ -133,16 +133,6 @@ function getFilter(controls) {
           ? Number(controls.input.tapsPerLeg.value)
           : undefined,
       );
-    case "downsampler":
-      controls.input.sampleRate.value = controls.input.outRate.value;
-      return new Downsampling(
-        Number(controls.input.inRate.value),
-        Number(controls.input.outRate.value),
-        controls.input.bandwidth.value
-          ? Number(controls.input.bandwidth.value) / 2
-          : undefined,
-        Number(controls.input.taps.value),
-      );
   }
   throw `Invalid filter type ${controls.filterType.value}`;
 }
@@ -438,7 +428,7 @@ class Resampling {
     this.resampler = Resamplers.getIqResampler(inRate, outRate, {
       lowPassFrequency: lpFreq,
       taps: taps,
-      tapsPerLeg: tapsPerLeg,
+      legacyTaps: tapsPerLeg,
     });
   }
 
@@ -459,54 +449,6 @@ class Resampling {
     resampled = expanded;
 
     let offset = Math.round(this.resampler.getDelay());
-    if (offset != 0) {
-      let shifted = [
-        new Float32Array(resampled[0].length),
-        new Float32Array(resampled[1].length),
-      ];
-      shifted[0].set(resampled[0].subarray(offset));
-      shifted[0]
-        .subarray(resampled[0].length - offset)
-        .set(resampled[0].subarray(0, offset));
-      shifted[1].set(resampled[1].subarray(offset));
-      shifted[1]
-        .subarray(resampled[1].length - offset)
-        .set(resampled[1].subarray(0, offset));
-      resampled = shifted;
-    }
-    let output = transformer.transform(resampled[0], resampled[1]);
-    return output;
-  }
-}
-
-class Downsampling {
-  constructor(inRate, outRate, lpFreq, taps) {
-    this.inRate = inRate;
-    this.outRate = outRate;
-    let kernel =
-      lpFreq === undefined
-        ? taps
-        : Coefficients.makeLowPassKernel(inRate, lpFreq, taps);
-    this.downsampler = new Resamplers.ComplexDownsampler(inRate, outRate, kernel);
-  }
-
-  spectrum(length) {
-    let transformer = FFT.ofLength(length);
-    const inLen = Math.ceil((length * this.inRate) / this.outRate);
-    let impulseR = new Float32Array(inLen);
-    let impulseI = new Float32Array(inLen);
-    impulseR[0] = inLen;
-
-    let resampled = this.downsampler.downsample(impulseR, impulseI);
-    let expanded = [
-      new Float32Array(transformer.length),
-      new Float32Array(transformer.length),
-    ];
-    expanded[0].set(resampled[0]);
-    expanded[1].set(resampled[1]);
-    resampled = expanded;
-
-    let offset = Math.round(this.downsampler.getDelay());
     if (offset != 0) {
       let shifted = [
         new Float32Array(resampled[0].length),
