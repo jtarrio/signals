@@ -1,5 +1,15 @@
 # Change log
 
+## 0.10.3
+
+* `atan2`: Fixed sign error for angles on the negative imaginary axis and quadrant boundaries.
+* `Radio`: Fixed startup and transfer error handling, and added missing `ready()` method.
+* `AudioPlayer`: Fixed sample rate reporting and audio playback speed across different audio context rates.
+* `RealTimeSource`: Maintained sample count and timing alignment across dynamic sample rate changes.
+* `RingBuffer`: Fixed chunk sizing in `fill()` during wrap-around.
+* `Spectrum`: Clamped FFT size to valid buffer capacity when resizing.
+* `tone()`: Allow fractional-frequency tones.
+
 ## 0.10.2
 
 * `Radio`: Added the ability to change the sample rate and the options while the radio is playing.
