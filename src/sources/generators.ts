@@ -36,7 +36,7 @@ export function tone(
       Q.fill(0);
       return;
     }
-    const p = 2 * Math.PI * delta * (sample % rate) + phase;
+    const p = 2 * Math.PI * ((delta * sample) % 1) + phase;
     let a = Math.cos(p);
     let b = Math.sin(p);
     const f = 2 * Math.PI * delta;
