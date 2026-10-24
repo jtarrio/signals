@@ -47,7 +47,7 @@ export class Spectrum implements SampleReceiver {
   private dirty: boolean;
 
   set size(newSize: number) {
-    this.fft = FFT.ofLength(newSize);
+    this.fft = FFT.ofLength(Math.max(32, Math.min(131072, newSize)));
     this.window = makeBlackmanWindow(this.fft.length);
     this.lastOutput = new Float32Array(this.fft.length);
     this.dirty = true;
