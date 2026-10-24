@@ -415,15 +415,17 @@ export class AGC implements Filter {
     this.dcBlocker = new DcBlocker(sampleRate);
     this.alpha = decay(sampleRate, timeConstantSeconds);
     this.counter = 0;
-    this.maxPower = 0;
-    this.maxGain = maxGain || 100;
+    this.maxGain = maxGain ?? 10000;
+    this.minPower = 1 / (this.maxGain * this.maxGain);
+    this.maxPower = this.minPower;
   }
 
   private dcBlocker: DcBlocker;
   private alpha: number;
   private counter: number;
-  private maxPower: number;
   private maxGain: number;
+  private minPower: number;
+  private maxPower: number;
 
   clone(): AGC {
     let copy = new AGC(this.sampleRate, 1, this.maxGain);
@@ -437,9 +439,9 @@ export class AGC implements Filter {
 
   inPlace(samples: Float32Array) {
     const alpha = this.alpha;
+    const minPower = this.minPower;
     let maxPower = this.maxPower;
     let counter = this.counter;
-    let gain;
     this.dcBlocker.inPlace(samples);
     for (let i = 0; i < samples.length; ++i) {
       const v = samples[i];
@@ -452,9 +454,9 @@ export class AGC implements Filter {
       } else if (counter > 0) {
         --counter;
       } else {
-        maxPower -= alpha * maxPower;
+        maxPower = Math.max(minPower, maxPower - alpha * maxPower);
       }
-      gain = Math.min(this.maxGain, 1 / Math.sqrt(maxPower));
+      let gain = 1 / Math.sqrt(maxPower);
       samples[i] *= gain;
     }
     this.maxPower = maxPower;
