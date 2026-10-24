@@ -94,7 +94,6 @@ export class AudioPlayer implements Player {
   }
 
   get sampleRate(): number {
-    if (this.ac) return this.ac.sampleRate;
     return 48000;
   }
 
