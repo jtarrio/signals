@@ -247,7 +247,7 @@ class RingBuffer<T extends TypedArray<T>> {
     let remaining = count;
     let dstOffset = this.writePos;
     while (remaining > 0) {
-      const copyCount = Math.min(remaining, this.buffer.length - this.writePos);
+      const copyCount = Math.min(remaining, this.buffer.length - dstOffset);
       this.buffer.subarray(dstOffset, dstOffset + copyCount).fill(value);
       dstOffset = (dstOffset + copyCount) % this.buffer.length;
       remaining -= copyCount;
